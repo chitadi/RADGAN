@@ -73,7 +73,44 @@ python train.py
 ```
 The rationale for the fast dev run phase is to facilitate quick fails (i.e., code issues, etc).  For now, you can terminate the training script (via `Ctrl+C`) after it has completed the fast development run phase and leverage it's saved file to test the submission portal.
 
-## 5. Submit a dummy evaluation result (in progress, will be released on 27th)
+## 5. Submit a dummy evaluation result
+
+
+To facilitate the submission during the testing phase, we have prepared some trial examples for submitting. Our team believe in protecting your hard work in this challenge and hence, provided a way to protect your IP without requiring you to open-source your submissions. In addition, we provide an single line command to prepare your submission in accordance to the submission platform. 
+
+For submission, you will need to run the following command `inside the docker container` (only one-time):
+```bash
+python3 -m pip install pip-chill
+echo "Updating package list..."
+apt-get update -y
+
+echo "Installing git..."
+apt-get install -y git
+
+git pull # this will update the save_for_submission file
+```
+
+To submit, just run the following command `inside the docker container`:
+```python 
+python3 /src/save_for_submission.py -c /results/WaveVoiceNet__learning_rate=0.001_fast_dev_run/fast_dev_run.yaml
+```
+which will generate the following outputs:
+```text
+/results/WaveVoiceNet__learning_rate=0.001_fast_dev_run/model_submission.zip
+```
+Download the zip file.
+
+
+With the .zip file, submit it to our Codabench challenge website. The following steps will guide you towards submissions:
+1. Register a Codabench account in www.codabench.org (please use the same email registered in our registration form as we have added them to the whitelist in 1.)
+2. Visit our challenge websites at https://www.codabench.org/competitions/10539/?secret_key=a16e7724-eaac-4bb6-80a7-d57081ba3074 for fast development trials and https://www.codabench.org/competitions/10857/?secret_key=46e8f79c-39d6-4843-83e5-86f8311e756d for official submission. For now, go to the former link for quick tests.
+.
+3. Under "My Submissions" tab, accept the terms and conditions, then register for our challenge. If you have not sign up using our registration form, please wait for our approval.
+4. Check that you have choose to submit as "Yourself" or your organization 
+5. Thereafter, go to the "My submissions" tab. Click the clip icon and upload the zip file. It will take a while to run (took about 2 mins for the fast development trial with our baseline). If your submission is successful, you should see a score after you refresh.
+6. Add your score to the leadership board.
+
+Please note that since the evaluation is done on our server, we note that bigger models will take substantially longer time to run (please also note that we will only supply one RTX6000 Ada per run). As such, we have restricted everyone to `one official` and `30 trials` submissions per day during the validation period and testing period. 
 
 
 ## 6. Innovate your new model!
@@ -111,10 +148,28 @@ CONFIG_FILE = "/src/config/train_{NewModelName}" #<-- change this
 ```
 
 With the above three, you will be able to start your own modelling.
+Make sure that all your model files are encapsulated within the folder **src/models** for smoother submission.
+
+
 
 Thank you and enjoy your modelling!
 
 
+## 🧩 Framework Overview
 
+This framework is built using:
 
+- 🐳 **[Docker](https://www.docker.com/):** for reproducible environments 
+- ⚡ **[PyTorch Lightning](https://github.com/Lightning-AI/pytorch-lightning):** for scalable and clean model training [1]
+- 🔥 **[PyTorch](https://pytorch.org/):** for flexible deep learning model design [2]
+- 🎙️ **WaveVoiceNet :** our implementation of baseline model in [3]
+- 🧮 **[Codabench](https://www.codabench.org/):** for benchmark evaluation and automated submission management [4] 
+
+**References**  
+[1] W. Falcon et al., “PyTorch Lightning,” GitHub repository, 2019. Available: https://github.com/Lightning-AI/pytorch-lightning
+[2] A. Paszke et al., “PyTorch: An imperative style, high-performance deep learning library,” in Proc. Adv. in Neural Info. Process. Syst., vol. 32, 2019, pp. 8024–8035.
+[3] C. Xu, Z. Li, H. Zhang, A. S. Rathore, H. Li, C. Song, K. Wang, and W. Xu, “WaveEar: Exploring a mmwave-based
+noise-resistant speech sensing for voice-user interface,” in Proc.
+Int. Conf. Mobile Syst. Applications Serv., 2019, p. 14–26.
+[4] S. Pavao, B. Pfahringer, and E. Frank, “Codabench: A benchmarking platform for reusable research,” J. Mach. Learn. Res., vol. 23, no. 1, pp. 1–6, 2022.
 
