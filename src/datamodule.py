@@ -15,15 +15,20 @@ import torchaudio
 from utils import safe_open_yaml
 import math
 from loguru import logger
+from dwt import unify
 
 DATASET_FOLDER = "/data/"
 
 class WavPairDataset(Dataset):
-    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec):
+    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, wavelet, level, tag):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
         self.task = task
         self.length_sec = length_sec
+        # specifically for wavelets
+        self.wavelet = wavelet
+        self.level = level
+        self.tag = tag
         assert len(self.recorded_wav_filepaths) == len(self.clean_wav_filepaths) 
         assert len(self.recorded_wav_filepaths) > 0
     def __getitem__(self, idx):
@@ -39,25 +44,37 @@ class WavPairDataset(Dataset):
 
         # temporarily cut off to align later
         recorded = recorded[:len(clean)]
+        # print(f"After alignment - Recorded: {recorded.shape}, Clean: {clean.shape}")
+        assert len(recorded) == len(clean)
 
         sample_length = self.length_sec * fs
+        start_time = 1
 
         recorded_padded = np.zeros(sample_length, dtype=np.float32)
         clean_padded    = np.zeros(sample_length, dtype=np.float32)
 
-        if len(recorded) > sample_length:
-            recorded_padded = recorded[:sample_length]
-        else:
-            recorded_padded[:len(recorded)] = recorded
+        # if len(recorded) > sample_length:
+        # if len(recorded) > sample_length + start_time * fs:
+            # recorded_padded = recorded[:sample_length]
+        recorded_padded = recorded[start_time * fs : sample_length + start_time * fs]
+        # else:
+        #     # recorded_padded[:len(recorded)] = recorded
+        #     recorded_padded[start_time * fs : len(recorded)] = recorded
 
 
-        if len(clean) > sample_length:
-            clean_padded = clean[:sample_length]
-        else:
-            clean_padded[:len(clean)] = clean
+        # if len(clean) > sample_length:
+        # if len(clean) > sample_length + start_time * fs:
+            # clean_padded = clean[:sample_lenth]
+        clean_padded = clean[start_time * fs : sample_length + start_time * fs]
+        # else:
+        #     # clean_padded = clean[:len(clean)]
+        #     clean_padded[start_time * fs : len(clean)] = clean
 
-        
-        return {"recorded": recorded_padded, "clean": clean_padded, "fs": fs, 
+        #  call the dwt function here and then add it to this dictionary for returning
+        features = unify(recorded_padded, wavelet=self.wavelet, level=self.level, tag=self.tag)
+        features = torch.from_numpy(features).float()
+        target   = torch.from_numpy(clean_padded).float().unsqueeze(0)
+        return {"recorded": features, "clean": target, "fs": fs, 
             "task": self.task
         }
 
@@ -67,11 +84,18 @@ class WavPairDataset(Dataset):
 class DataModule(pl.LightningDataModule):
     def __init__(self, 
         batch_size,
-        length_sec
+        length_sec, 
+        wavelet="db1", 
+        level=3, 
+        tag="zeros"
         ):
         super().__init__()
 
-
+        # for wavelets
+        self.wavelet = wavelet
+        self.level = level
+        self.tag = tag
+        # normal processing
         self.batch_size = batch_size
         self.length_sec = length_sec
         # self.pairs = self.get_file_paths()
@@ -131,7 +155,10 @@ class DataModule(pl.LightningDataModule):
                 self.dataset[mode] += WavPairDataset(recorded_wav_filepaths, 
                     clean_wav_filepaths, 
                     task=task, 
-                    length_sec=self.length_sec)
+                    length_sec=self.length_sec,
+                    wavelet=self.wavelet,
+                    level=self.level,
+                    tag=self.tag,)
 
                 # if mode == "train":
                 #     self.dataset["train"] 
@@ -145,7 +172,8 @@ class DataModule(pl.LightningDataModule):
         
     def data_loader(self, mode):
 
-        shuffle = True if mode == "train" or mode == "val" else False
+        # shuffle = True if mode == "train" or mode == "val" else False
+        shuffle = True if mode == "train" else False
         
         return torch.utils.data.DataLoader(
             self.dataset[mode], 

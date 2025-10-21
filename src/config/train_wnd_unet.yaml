@@ -1,0 +1,12 @@
+
+datamodule: 
+  length_sec: 4
+  batch_size: 8
+  wavelet: "db1"
+  level: 3
+  tag: zeros
+
+model: "wnd_unet"
+model_params:
+  learning_rate: 0.0003
+  base_channels: 64

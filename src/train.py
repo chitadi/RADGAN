@@ -1,7 +1,7 @@
 
 import os
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import CSVLogger
 
@@ -24,8 +24,8 @@ current_directory = os.path.dirname(__file__)
 python_file_name = os.path.splitext(os.path.basename(__file__))[0]
 
 OUTPUT_DIR = "/results/" 
-# CONFIG_FILE = "/src/config/train_QuazoModel.yaml"
-CONFIG_FILE = "/src/config/train_baseline.yaml"
+CONFIG_FILE = "/src/config/train_wnd_unet.yaml"
+# CONFIG_FILE = "/src/config/train_baseline.yaml"
 
 def _init_model(model_name, model_params):
     model_cls       = getattr(models, model_name)
@@ -36,7 +36,7 @@ def _init_model(model_name, model_params):
 def _validate(trainer, data_module, model_name, best_ckpt, model_params, save_dir, fast_dev_run=True):
 
 
-    best_ckpt = ckpt_callback.best_model_path
+    best_ckpt = best_ckpt
     logger.info(f"The best model can be found in {best_ckpt}")
     model_cls       = getattr(models, model_name)
     best_model = model_cls.load_from_checkpoint(best_ckpt, **model_params)
@@ -110,11 +110,12 @@ if __name__ == "__main__":
         filename='{epoch:03d}-{step}-{val/loss:.2f}',
         mode="min",
     )
+    lr_monitor = LearningRateMonitor(logging_interval='step')
     pl_logger = CSVLogger("logs", name=f"{model_name}_{model_params_str}")
     trainer = pl.Trainer(
-        max_epochs=300,
+        max_epochs=10,
         default_root_dir=save_dir,
-        callbacks=[ckpt_callback],
+        callbacks=[ckpt_callback, lr_monitor],
         gradient_clip_val=0.5,
         logger=pl_logger,
         devices=1
