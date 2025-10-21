@@ -76,6 +76,8 @@ class BaseModel(pl.LightningModule):
             output = []
             for batch_ref, batch_deg in zip(targets, outputs):
                 for ref, deg in zip(batch_ref, batch_deg):
+                    ref = np.asarray(ref).squeeze()
+                    deg = np.asarray(deg).squeeze()
                     val = fn(ref, deg)
                     output.append(val)
 
