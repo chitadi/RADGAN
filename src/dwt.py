@@ -18,7 +18,6 @@ def upsampler(m_t, coefficients, tag):
     
     elif tag == "interpolation":
         upsampling_coefficient = int((len(m_t)/len(coefficients))/2)
-        print(upsampling_coefficient)
         coefficients = upfirdn([0.5, 1.0, 0.5], coefficients, upsampling_coefficient)
         
         if len(coefficients)<(len(m_t)/2):
