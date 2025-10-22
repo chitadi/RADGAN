@@ -15,7 +15,7 @@ import torchaudio
 from utils import safe_open_yaml
 import math
 from loguru import logger
-from dwt import unify
+from dwt import unify, normalize
 
 DATASET_FOLDER = "/data/"
 
@@ -72,6 +72,7 @@ class WavPairDataset(Dataset):
 
         #  call the dwt function here and then add it to this dictionary for returning
         features = unify(recorded_padded, wavelet=self.wavelet, level=self.level, tag=self.tag)
+        clean_padded = normalize(clean_padded)
         features = torch.from_numpy(features).float()
         target   = torch.from_numpy(clean_padded).float().unsqueeze(0)
         return {"recorded": features, "clean": target, "fs": fs, 
@@ -87,7 +88,7 @@ class DataModule(pl.LightningDataModule):
         length_sec, 
         wavelet="db1", 
         level=3, 
-        tag="zeros"
+        tag="interpolation"
         ):
         super().__init__()
 

@@ -92,7 +92,7 @@ class BaseModel(pl.LightningModule):
         self.test_tasks.append(task)
 
     def metrics_evaluation(self, mode, outputs, targets, tasks):
-
+        
         # Compute metrics (loop over utterances if necessary)
         pesq_vals, estoi_vals, dnsmos_vals, csmfcc_vals= [], [], [], []
 
@@ -107,6 +107,8 @@ class BaseModel(pl.LightningModule):
             output = []
             for batch_ref, batch_deg in zip(targets, outputs):
                 for ref, deg in zip(batch_ref, batch_deg):
+                    ref = np.asarray(ref).squeeze()
+                    deg = np.asarray(deg).squeeze()
                     try:
                         val = fn(ref, deg)
                     except Exception as e: 
