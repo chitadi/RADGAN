@@ -61,11 +61,11 @@ def get_wavelet_coefficients(m_t, wavelet, level, tag):
 def normalize(m_t):
     max_abs = np.max(np.abs(m_t))
     m_t = m_t.astype(np.float64) / max_abs
-    return m_t
+    return m_t, max_abs
     
 def unify(m_t, wavelet='db1', level=3, tag = "zeros"):
     #normalizing to 1
-    m_t = normalize(m_t)
+    m_t, _ = normalize(m_t)
 
     a3,d3,d2,d1 = get_wavelet_coefficients(m_t, wavelet, level,tag)
     row1 = m_t

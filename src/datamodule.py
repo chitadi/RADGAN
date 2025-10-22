@@ -15,7 +15,7 @@ import torchaudio
 from utils import safe_open_yaml
 import math
 from loguru import logger
-from dwt import unify, normalize
+from dwt import unify
 
 DATASET_FOLDER = "/data/"
 
@@ -71,8 +71,8 @@ class WavPairDataset(Dataset):
         #     clean_padded[start_time * fs : len(clean)] = clean
 
         #  call the dwt function here and then add it to this dictionary for returning
-        features = unify(recorded_padded, wavelet=self.wavelet, level=self.level, tag=self.tag)
-        clean_padded = normalize(clean_padded)
+        features, max_abs = unify(recorded_padded, wavelet=self.wavelet, level=self.level, tag=self.tag)
+        clean_padded = clean_padded.astype(np.float32) / max_abs
         features = torch.from_numpy(features).float()
         target   = torch.from_numpy(clean_padded).float().unsqueeze(0)
         return {"recorded": features, "clean": target, "fs": fs, 
