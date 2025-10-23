@@ -46,6 +46,7 @@ class WavPairDataset(Dataset):
         recorded = recorded[:len(clean)]
         # print(f"After alignment - Recorded: {recorded.shape}, Clean: {clean.shape}")
         assert len(recorded) == len(clean)
+        assert len(recorded) >= (start_time + self.length_sec) * fs
 
         sample_length = self.length_sec * fs
         start_time = 1
@@ -71,11 +72,11 @@ class WavPairDataset(Dataset):
         #     clean_padded[start_time * fs : len(clean)] = clean
 
         #  call the dwt function here and then add it to this dictionary for returning
-        features, scale, is_silent = unify(recorded_padded, wavelet=self.wavelet, level=self.level, tag=self.tag)
-        if is_silent:
-            clean_padded = np.zeros_like(clean_padded, dtype=np.float32)
-        else:
-            clean_padded = clean_padded.astype(np.float32) / scale
+        features, scale = unify(recorded_padded, wavelet=self.wavelet, level=self.level, tag=self.tag)
+        # if is_silent:
+        #     clean_padded = clean_padded.astype(np.float32)
+        # else:
+        clean_padded = clean_padded.astype(np.float32) / scale
         features = torch.from_numpy(features).float()
         target   = torch.from_numpy(clean_padded).float().unsqueeze(0)
         return {"recorded": features, "clean": target, "fs": fs, 
@@ -155,14 +156,32 @@ class DataModule(pl.LightningDataModule):
                 assert len(recorded_wav_filepaths) == len(clean_wav_filepaths)
                 
                 logger.info(f"{mode}: {len(recorded_wav_filepaths)} wav files.")
+
+                self.dataset[mode].append(
+                    WavPairDataset(
+                        recorded_wav_filepaths,
+                        clean_wav_filepaths,
+                        task=task,
+                        length_sec=self.length_sec,
+                        wavelet=self.wavelet,
+                        level=self.level,
+                        tag=self.tag,
+                    )
+                )
+
+        # turn the per-mode lists into a single dataset for each loader
+        for mode, datasets in self.dataset.items():
+            if datasets and not isinstance(datasets, ConcatDataset):
+                self.dataset[mode] = ConcatDataset(datasets)
+
                 
-                self.dataset[mode] += WavPairDataset(recorded_wav_filepaths, 
-                    clean_wav_filepaths, 
-                    task=task, 
-                    length_sec=self.length_sec,
-                    wavelet=self.wavelet,
-                    level=self.level,
-                    tag=self.tag,)
+                # self.dataset[mode] += WavPairDataset(recorded_wav_filepaths, 
+                #     clean_wav_filepaths, 
+                #     task=task, 
+                #     length_sec=self.length_sec,
+                #     wavelet=self.wavelet,
+                #     level=self.level,
+                #     tag=self.tag,)
 
                 # if mode == "train":
                 #     self.dataset["train"] 
