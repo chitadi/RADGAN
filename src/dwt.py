@@ -58,14 +58,16 @@ def get_wavelet_coefficients(m_t, wavelet, level, tag):
         d1=np.array(d1)
         return (a3,d3,d2,d1)
 
-def normalize(m_t, eps: float = 1e-8):
+def normalize(m_t, eps: float = 1e-8, silence_threshold: float = 1e-4):
     max_abs = np.max(np.abs(m_t))
+    if max_abs < silence_threshold:
+        return np.zeros_like(m_t, dtype=np.float64), 1.0, True
     scale = max(max_abs, eps)
-    return m_t.astype(np.float64) / scale, scale
+    return m_t.astype(np.float64) / scale, scale, False
     
 def unify(m_t, wavelet='db1', level=3, tag = "zeros"):
     #normalizing to 1
-    m_t, max_abs = normalize(m_t)
+    m_t, max_abs, is_silent = normalize(m_t)
 
     a3,d3,d2,d1 = get_wavelet_coefficients(m_t, wavelet, level,tag)
     row1 = m_t
@@ -77,4 +79,4 @@ def unify(m_t, wavelet='db1', level=3, tag = "zeros"):
         row2 = np.concatenate([a3,d3,d2,d1])
     assert row2.shape[0] == row1.shape[0], "Shapes do not match!"
     input_array = np.vstack((row1, row2))
-    return input_array, max_abs
+    return input_array, max_abs, is_silent

@@ -71,8 +71,11 @@ class WavPairDataset(Dataset):
         #     clean_padded[start_time * fs : len(clean)] = clean
 
         #  call the dwt function here and then add it to this dictionary for returning
-        features, scale = unify(recorded_padded, wavelet=self.wavelet, level=self.level, tag=self.tag)
-        clean_padded = clean_padded.astype(np.float32) / scale
+        features, scale, is_silent = unify(recorded_padded, wavelet=self.wavelet, level=self.level, tag=self.tag)
+        if is_silent:
+            clean_padded = np.zeros_like(clean_padded, dtype=np.float32)
+        else:
+            clean_padded = clean_padded.astype(np.float32) / scale
         features = torch.from_numpy(features).float()
         target   = torch.from_numpy(clean_padded).float().unsqueeze(0)
         return {"recorded": features, "clean": target, "fs": fs, 
