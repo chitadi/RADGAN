@@ -4,9 +4,9 @@ datamodule:
   batch_size: 8
   wavelet: "db1"
   level: 3
-  tag: zeros
+  tag: all
 
 model: "wnd_unet"
 model_params:
-  learning_rate: 0.0003
+  learning_rate: 0.0001
   base_channels: 64

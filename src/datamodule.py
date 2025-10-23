@@ -46,10 +46,10 @@ class WavPairDataset(Dataset):
         recorded = recorded[:len(clean)]
         # print(f"After alignment - Recorded: {recorded.shape}, Clean: {clean.shape}")
         assert len(recorded) == len(clean)
+        start_time = 1
         assert len(recorded) >= (start_time + self.length_sec) * fs
 
         sample_length = self.length_sec * fs
-        start_time = 1
 
         recorded_padded = np.zeros(sample_length, dtype=np.float32)
         clean_padded    = np.zeros(sample_length, dtype=np.float32)
@@ -92,7 +92,8 @@ class DataModule(pl.LightningDataModule):
         length_sec, 
         wavelet="db1", 
         level=3, 
-        tag="interpolation"
+        tag="all",
+        num_workers=4
         ):
         super().__init__()
 
@@ -105,6 +106,7 @@ class DataModule(pl.LightningDataModule):
         self.length_sec = length_sec
         # self.pairs = self.get_file_paths()
         self.dataset = {"train": [], "val": [], "test": []}
+        self.num_workers = num_workers
     # def print_summary(self):
 
     #     for mode in self.modes:
@@ -124,7 +126,9 @@ class DataModule(pl.LightningDataModule):
         task_folders = os.listdir(DATASET_FOLDER)
         logger.info(f"The available tasks are {task_folders}")
         logger.info(f"Loading dataset")
-        
+
+        # Initialize dataset dict with lists
+        self.dataset = {"train": [], "val": [], "test": []}
         
         for task in task_folders:
             
@@ -199,9 +203,12 @@ class DataModule(pl.LightningDataModule):
         shuffle = True if mode == "train" else False
         
         return torch.utils.data.DataLoader(
-            self.dataset[mode], 
-            batch_size=self.batch_size, 
-            shuffle=shuffle)
+            self.dataset[mode],
+            batch_size=self.batch_size,
+            shuffle=shuffle,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
 
     def train_dataloader(self):
         return self.data_loader("train")
