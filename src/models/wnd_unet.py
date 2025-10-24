@@ -115,11 +115,13 @@ class DecoderBlock(nn.Module):
     def __init__(self, in_channels: int, skip_channels: int, out_channels: int):
         super().__init__()
         self.up = nn.ConvTranspose1d(in_channels, out_channels, kernel_size=2, stride=2)
+        self.activation = nn.ReLU(inplace=True)
         self.post_up = DoubleConvBlock(out_channels + skip_channels, out_channels)
         self.residual = ResidualConvBlock(out_channels)
 
     def forward(self, x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
         x = self.up(x)
+        x = self.activation(x)
         if x.shape[-1] != skip.shape[-1]:
             # Pad/crop for odd lengths
             diff = skip.shape[-1] - x.shape[-1]
@@ -206,13 +208,17 @@ class WnDUNet1D(nn.Module):
 class wnd_unet(BaseModel):
     def __init__(
         self,
-        learning_rate: float = 3e-4,
+        learning_rate: float = 1e-4,
         base_channels: int = 64,
         channel_multipliers=(1, 2, 4, 8, 8),
         in_channels: int = 2,
         out_channels: int = 1,
+        lr_scheduler_patience: int = 3,
+        lr_scheduler_factor: float = 0.5,
     ):
         super().__init__()
+        self.lr_scheduler_patience = lr_scheduler_patience
+        self.lr_scheduler_factor = lr_scheduler_factor
         self.learning_rate = learning_rate
         self.backbone = WnDUNet1D(
             in_channels=in_channels,
@@ -233,5 +239,17 @@ class wnd_unet(BaseModel):
         return self.loss_fn(enhanced, clean)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+            scheduler = {
+                "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
+                    optimizer,
+                    mode="min",
+                    factor=self.lr_scheduler_factor,
+                    patience=self.lr_scheduler_patience,
+                    verbose=True
+                ),
+                "monitor": "val/loss",
+                "interval": "epoch",
+                "frequency": 1
+            }
+            return [optimizer], [scheduler]
