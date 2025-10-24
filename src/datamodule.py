@@ -80,7 +80,8 @@ class WavPairDataset(Dataset):
         features = torch.from_numpy(features).float()
         target   = torch.from_numpy(clean_padded).float().unsqueeze(0)
         return {"recorded": features, "clean": target, "fs": fs, 
-            "task": self.task
+            "task": self.task,
+            "scale": scale
         }
 
     def __len__(self):
@@ -216,4 +217,3 @@ class DataModule(pl.LightningDataModule):
         return self.data_loader("val")
     def test_dataloader(self):
         return self.data_loader("test")
-
