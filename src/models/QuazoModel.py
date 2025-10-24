@@ -246,7 +246,7 @@ class QuazoModel(BaseModel):
     
 def main():
 
-    model = WaveVoiceNet(verbose=True)
+    model = QuazoModel(verbose=True)
     batch_size = 32
 
     sample = torch.zeros(batch_size, 8000 * 10) 
