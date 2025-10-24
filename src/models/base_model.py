@@ -45,10 +45,12 @@ class BaseModel(pl.LightningModule):
         self.val_outputs = []
         self.val_targets = []
         self.val_tasks = []
+        self.val_scales = []
 
         self.test_outputs = []
         self.test_targets = []
         self.test_tasks = []
+        self.test_scales = []
         
         self.heavy_eval = False
 
@@ -82,6 +84,7 @@ class BaseModel(pl.LightningModule):
             self.val_outputs.append(enhanced.detach().cpu().numpy())
             self.val_targets.append(clean.detach().cpu().numpy())
             self.val_tasks.append(task)
+            self.val_scales.append(batch["scale"].detach().cpu().numpy() if isinstance(batch["scale"], torch.Tensor) else np.asarray(batch["scale"]))
 
         return loss
 
@@ -90,14 +93,21 @@ class BaseModel(pl.LightningModule):
         self.test_outputs.append(enhanced.detach().cpu().numpy())
         self.test_targets.append(clean.detach().cpu().numpy())
         self.test_tasks.append(task)
+        self.test_scales.append(batch["scale"].detach().cpu().numpy() if isinstance(batch["scale"], torch.Tensor) else np.asarray(batch["scale"]))
 
-    def metrics_evaluation(self, mode, outputs, targets, tasks):
+    def metrics_evaluation(self, mode, outputs, targets, tasks, scales):
         
-        # Compute metrics (loop over utterances if necessary)
-        pesq_vals, estoi_vals, dnsmos_vals, csmfcc_vals= [], [], [], []
-
-        task1_scores_vals = []
-        task2_scores_vals = []
+        refs_denorm, degs_denorm = [], []
+        flat_tasks = []
+        for batch_out, batch_ref, batch_task, batch_scale in zip(outputs, targets, tasks, scales):
+            batch_scale = np.asarray(batch_scale).astype(np.float64).reshape(-1)
+            denorm_refs, denorm_degs = [], []
+            for out, ref, scale in zip(batch_out, batch_ref, batch_scale):
+                denorm_refs.append(np.asarray(ref).squeeze() * scale)
+                denorm_degs.append(np.asarray(out).squeeze() * scale)
+            refs_denorm.append(denorm_refs)
+            degs_denorm.append(denorm_degs)
+            flat_tasks.extend(batch_task)
 
         def evaluate_metrics_per_batch(fn, measure_time=False):
 
@@ -105,14 +115,11 @@ class BaseModel(pl.LightningModule):
                 torch.cuda.synchronize()  # make sure all prior ops are done
                 start = time.perf_counter()
             output = []
-            for batch_ref, batch_deg in zip(targets, outputs):
+            for batch_ref, batch_deg in zip(refs_denorm, degs_denorm):
                 for ref, deg in zip(batch_ref, batch_deg):
-                    ref = np.asarray(ref).squeeze()
-                    deg = np.asarray(deg).squeeze()
                     try:
                         val = fn(ref, deg)
-                    except Exception as e: 
-                        # print(e)
+                    except Exception:
                         val = fn.min()
                     output.append(val)
 
@@ -135,15 +142,13 @@ class BaseModel(pl.LightningModule):
         estoi_vals = evaluate_metrics_per_batch(self.estoi_fn, measure_time=True)
 
 
-        task_vals = []
-        for batch_task in tasks:
-            for task in batch_task:
-                task_vals.append(task)
+        task1_scores_vals = []
+        task2_scores_vals = []
 
-        assert len(task_vals) == len(csmfcc_vals), f"{len(task_vals)} vs {len(csmfcc_vals)}"
+        assert len(flat_tasks) == len(csmfcc_vals), f"{len(flat_tasks)} vs {len(csmfcc_vals)}"
 
         for pesq_val, dnsmos_val, estoi_val, csmfcc_val, task in \
-            zip(pesq_vals, dnsmos_vals, estoi_vals, csmfcc_vals, task_vals):
+            zip(pesq_vals, dnsmos_vals, estoi_vals, csmfcc_vals, flat_tasks):
 
             dnsmos_n = (dnsmos_val - 1.0) / (5.0 - 1.0)
             pesq_n = (pesq_val - 1.0) / (4.5 - 1.0)
@@ -184,11 +189,13 @@ class BaseModel(pl.LightningModule):
             self.metrics_evaluation("val", 
                 self.val_outputs, 
                 self.val_targets, 
-                self.val_tasks)
+                self.val_tasks,
+                self.val_scales)
 
             self.val_outputs.clear()
             self.val_targets.clear()
             self.val_tasks.clear()
+            self.val_scales.clear()
 
 
     def on_test_epoch_end(self):
@@ -196,10 +203,10 @@ class BaseModel(pl.LightningModule):
         self.metrics_evaluation("test", 
             self.test_outputs, 
             self.test_targets, 
-            self.test_tasks)
+            self.test_tasks,
+            self.test_scales)
 
         self.test_outputs.clear()
         self.test_targets.clear()
         self.test_tasks.clear()
-       
-
+        self.test_scales.clear() 
