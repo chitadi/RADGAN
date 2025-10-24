@@ -210,7 +210,7 @@ class WnDUNet1D(nn.Module):
 class wnd_unet(BaseModel):
     def __init__(
         self,
-        learning_rate: float = 1e-4,
+        learning_rate: float = 1e-3,
         base_channels: int = 64,
         channel_multipliers=(1, 2, 4, 8, 8),
         in_channels: int = 2,
@@ -239,38 +239,32 @@ class wnd_unet(BaseModel):
 
     def loss_function(self, clean: torch.Tensor, enhanced: torch.Tensor) -> torch.Tensor:
         return self.loss_fn(enhanced, clean)
-    
+
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         warmup_steps = 1000
         total_steps = self.trainer.estimated_stepping_batches  # populated after setup
-
+        
         def lr_lambda(step):
             if step < warmup_steps:
                 return float(step + 1) / float(warmup_steps)
             progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
             return 0.5 * (1.0 + math.cos(math.pi * progress))
-        
-        warmup_scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
-        plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode="min",
-            factor=self.lr_scheduler_factor,
-            patience=self.lr_scheduler_patience,
-            verbose=True
-        )
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": [
-                {
-                    "scheduler": warmup_scheduler,
-                    "interval": "step",
-                },
-                {
-                    "scheduler": plateau_scheduler,
-                    "monitor": "val/loss",
-                    "interval": "epoch",
-                    "frequency": 1,
-                },
-            ],
+
+        warmup = {
+            "scheduler": torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda),
+            "interval": "step",
         }
+        plateau = {
+            "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                mode="min",
+                factor=self.lr_scheduler_factor,
+                patience=self.lr_scheduler_patience,
+                verbose=True,
+            ),
+            "monitor": "val/loss",
+            "interval": "epoch",
+        }
+
+        return [optimizer], [warmup, plateau]
