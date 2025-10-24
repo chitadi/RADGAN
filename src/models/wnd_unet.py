@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .base_model import BaseModel
+import math
+from torch.optim.lr_scheduler import LambdaLR
 
 def _make_depthwise_conv(in_channels: int, kernel_size: int = 7, padding: int = 3) -> nn.Conv1d:
     # Depth-wise 1D convolution: groups=in_channels ensures channel-wise filtering
@@ -237,19 +239,38 @@ class wnd_unet(BaseModel):
 
     def loss_function(self, clean: torch.Tensor, enhanced: torch.Tensor) -> torch.Tensor:
         return self.loss_fn(enhanced, clean)
-
+    
     def configure_optimizers(self):
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-            scheduler = {
-                "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
-                    optimizer,
-                    mode="min",
-                    factor=self.lr_scheduler_factor,
-                    patience=self.lr_scheduler_patience,
-                    verbose=True
-                ),
-                "monitor": "val/loss",
-                "interval": "epoch",
-                "frequency": 1
-            }
-            return [optimizer], [scheduler]
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        warmup_steps = 1000
+        total_steps = self.trainer.estimated_stepping_batches  # populated after setup
+
+        def lr_lambda(step):
+            if step < warmup_steps:
+                return float(step + 1) / float(warmup_steps)
+            progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+            return 0.5 * (1.0 + math.cos(math.pi * progress))
+        
+        warmup_scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
+        plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=self.lr_scheduler_factor,
+            patience=self.lr_scheduler_patience,
+            verbose=True
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": [
+                {
+                    "scheduler": warmup_scheduler,
+                    "interval": "step",
+                },
+                {
+                    "scheduler": plateau_scheduler,
+                    "monitor": "val/loss",
+                    "interval": "epoch",
+                    "frequency": 1,
+                },
+            ],
+        }
