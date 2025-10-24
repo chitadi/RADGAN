@@ -8,5 +8,7 @@ datamodule:
 
 model: "wnd_unet"
 model_params:
-  learning_rate: 0.0001
+  learning_rate: 0.001
   base_channels: 64
+  lr_scheduler_patience: 3
+  lr_scheduler_factor: 0.5

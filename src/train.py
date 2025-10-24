@@ -113,10 +113,11 @@ if __name__ == "__main__":
     lr_monitor = LearningRateMonitor(logging_interval='step')
     pl_logger = CSVLogger("logs", name=f"{model_name}_{model_params_str}")
     trainer = pl.Trainer(
-        max_epochs=10,
+        max_epochs=100,
         default_root_dir=save_dir,
         callbacks=[ckpt_callback, lr_monitor],
         gradient_clip_val=0.5,
+        log_every_n_steps=50,
         logger=pl_logger,
         devices=1
     )
