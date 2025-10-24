@@ -61,9 +61,9 @@ def get_wavelet_coefficients(m_t, wavelet, level, tag):
 def normalize(m_t, eps: float = 1e-8, silence_threshold: float = 1e-4):
     max_abs = np.max(np.abs(m_t))
     if max_abs < silence_threshold:
-        return m_t.astype(np.float64), 1.0
+        return m_t.astype(np.float32), 1.0
     scale = max(max_abs, eps)
-    return m_t.astype(np.float64) / scale, scale
+    return m_t.astype(np.float32) / scale, scale
     
 def unify(m_t, wavelet='db1', level=3, tag = "zeros"):
     #normalizing to 1
