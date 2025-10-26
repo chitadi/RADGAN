@@ -209,4 +209,13 @@ class BaseModel(pl.LightningModule):
         self.test_outputs.clear()
         self.test_targets.clear()
         self.test_tasks.clear()
-        self.test_scales.clear() 
+        self.test_scales.clear()
+
+    def on_after_backward(self):
+        total_norm_sq = 0.0
+        for param in self.parameters():
+            if param.grad is not None:
+                param_norm = param.grad.data.norm(2)
+                total_norm_sq += param_norm.item() ** 2
+        grad_norm = math.sqrt(total_norm_sq)
+        self.log("grad_2_norm", grad_norm, on_step=True, prog_bar=False, logger=True)
