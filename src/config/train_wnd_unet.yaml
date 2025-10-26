@@ -12,3 +12,4 @@ model_params:
   base_channels: 64
   lr_scheduler_patience: 3
   lr_scheduler_factor: 0.5
+  weight_decay: 1.0e-4

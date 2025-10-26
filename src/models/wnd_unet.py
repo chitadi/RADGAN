@@ -217,11 +217,13 @@ class wnd_unet(BaseModel):
         out_channels: int = 1,
         lr_scheduler_patience: int = 3,
         lr_scheduler_factor: float = 0.5,
+        weight_decay: float = 0.0,
     ):
         super().__init__()
         self.lr_scheduler_patience = lr_scheduler_patience
         self.lr_scheduler_factor = lr_scheduler_factor
         self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
         self.backbone = WnDUNet1D(
             in_channels=in_channels,
             base_channels=base_channels,
@@ -241,7 +243,9 @@ class wnd_unet(BaseModel):
         return self.loss_fn(enhanced, clean)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.Adam(self.parameters(), 
+                                    lr=self.learning_rate,
+                                    weight_decay = weight_decay)
         warmup_steps = 1000
         total_steps = self.trainer.estimated_stepping_batches  # populated after setup
         
@@ -261,7 +265,7 @@ class wnd_unet(BaseModel):
                 mode="min",
                 factor=self.lr_scheduler_factor,
                 patience=self.lr_scheduler_patience,
-                verbose=True,
+                # verbose=True,
             ),
             "monitor": "val/loss",
             "interval": "epoch",
