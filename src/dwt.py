@@ -70,6 +70,11 @@ def unify(m_t, wavelet='db1', level=3, tag = "zeros"):
     m_t, max_abs = normalize(m_t)
 
     a3,d3,d2,d1 = get_wavelet_coefficients(m_t, wavelet, level,tag)
+    a3 = normalize(a3)[0]
+    d3 = normalize(d3)[0]
+    if tag == "all":
+        d2 = normalize(d2)[0]
+        d1 = normalize(d1)[0]
     row1 = m_t
     
     #input to the model
