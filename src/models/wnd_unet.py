@@ -235,14 +235,13 @@ class WnDUNet1D(nn.Module):
 class wnd_unet(BaseModel):
     def __init__(
         self,
-        learning_rate: float = 1e-3,
+        learning_rate: float = 3e-4,
         base_channels: int = 64,
         channel_multipliers=(1, 2, 4, 8, 8),
-        in_channels: int = 2,
         out_channels: int = 1,
         lr_scheduler_patience: int = 3,
         lr_scheduler_factor: float = 0.5,
-        weight_decay: float = 0.0,
+        weight_decay: float = 1.0e-4,
         in_channels: int = 1, 
         use_wavelet_conditioner: bool = False
     ):
@@ -292,6 +291,12 @@ class wnd_unet(BaseModel):
             for key in self.wavelet_keys:
                 coeff = x[key].unsqueeze(1).float()
                 upsampled = self.wavelet_upsamplers[key](coeff, target_len)
+                if self.training:
+                    self.log(f"train/{key}_mean", upsampled.mean(), on_step=True, prog_bar=False)
+                    self.log(f"train/{key}_std", upsampled.std(unbiased=False), on_step=True, prog_bar=False)
+                else:
+                    self.log(f"val/{key}_mean", upsampled.mean(), on_step=False, on_epoch=True, prog_bar=False)
+                    self.log(f"val/{key}_std", upsampled.std(unbiased=False), on_step=False, on_epoch=True, prog_bar=False)
                 channels.append(upsampled)
             x = torch.cat(channels, dim=1)
         else:
@@ -305,12 +310,15 @@ class wnd_unet(BaseModel):
 
     def loss_function(self, clean: torch.Tensor, enhanced: torch.Tensor) -> torch.Tensor:
         return self.loss_fn(enhanced, clean)
+    
+    def configure_gradient_clipping(self, optimizer, optimizer_idx=None, gradient_clip_val=None, gradient_clip_algorithm=None):
+        torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0, norm_type=2.0)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), 
                                     lr=self.learning_rate,
                                     weight_decay = self.weight_decay)
-        warmup_steps = 1000
+        warmup_steps = 3000
         total_steps = self.trainer.estimated_stepping_batches  # populated after setup
         
         def lr_lambda(step):

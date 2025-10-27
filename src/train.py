@@ -119,6 +119,7 @@ if __name__ == "__main__":
         callbacks=[ckpt_callback],
         logger=loggers,
         gradient_clip_val=0.5,
+        gradient_clip_algorithm="norm",
         limit_train_batches=5,
         limit_val_batches=5,
         devices=[1]
@@ -157,6 +158,7 @@ if __name__ == "__main__":
         default_root_dir=save_dir,
         callbacks=[ckpt_callback, lr_monitor],
         gradient_clip_val=1.0,
+        gradient_clip_algorithm="norm",
         log_every_n_steps=50,
         logger=loggers,
         devices=[1]

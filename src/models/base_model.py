@@ -71,15 +71,19 @@ class BaseModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         enhanced, clean, task = self.common_step(batch, batch_idx, mode="train")
         loss = self.loss_function(clean, enhanced)
-
-        self.log(f'train/loss', loss)
+        scale = batch["scale"]
+        if not isinstance(scale, torch.Tensor):
+            scale = torch.as_tensor(scale, device=self.device, dtype=torch.float32)
+        self.log(f'train/loss', loss, logger=True)
+        self.log("train/scale_mean", scale.mean(), prog_bar=False, on_step=True)
+        self.log("train/scale_std", scale.std(unbiased=False), prog_bar=False, on_step=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
 
         enhanced, clean, task = self.common_step(batch, batch_idx, mode="val")
         loss = self.loss_function(clean, enhanced)
-        self.log(f'val/loss', loss)
+        self.log(f'val/loss', loss, logger=True)
         if self.heavy_eval:
             self.val_outputs.append(enhanced.detach().cpu().numpy())
             self.val_targets.append(clean.detach().cpu().numpy())
