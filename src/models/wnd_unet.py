@@ -259,6 +259,8 @@ class wnd_unet(BaseModel):
         self.loss_fn = nn.MSELoss()
         self.use_wavelet_conditioner = use_wavelet_conditioner
         self.wavelet_keys = ("a3", "d3", "d2", "d1")
+        self.freeze_backbone_steps = 500  # tune as needed
+        self._backbone_frozen = False
 
         if self.use_wavelet_conditioner:
             self.wavelet_upsamplers = nn.ModuleDict(
@@ -281,6 +283,19 @@ class wnd_unet(BaseModel):
             out_channels=out_channels,
         )
 
+    def on_train_batch_start(self, batch, batch_idx, dataloader_idx=0):
+        if self.use_wavelet_conditioner and not self._backbone_frozen:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+            self._backbone_frozen = True
+
+    def on_train_batch_end(self, outputs, batch, batch_idx, dataloader_idx=0):
+        if self.use_wavelet_conditioner and self._backbone_frozen and self.global_step >= self.freeze_backbone_steps:
+            for param in self.backbone.parameters():
+                param.requires_grad = True
+            self._backbone_frozen = False
+
+
     def forward(self, x: torch.Tensor | dict[str, torch.Tensor]) -> torch.Tensor:
         if isinstance(x, dict):
             if not self.use_wavelet_conditioner:
@@ -288,9 +303,11 @@ class wnd_unet(BaseModel):
             waveform = x["m_t"].unsqueeze(1).float()
             target_len = waveform.shape[-1]
             channels = [waveform]
+            self._conditioning_stats = {}
             for key in self.wavelet_keys:
                 coeff = x[key].unsqueeze(1).float()
                 upsampled = self.wavelet_upsamplers[key](coeff, target_len)
+                self._conditioning_stats[key] = (upsampled, coeff)
                 if self.training:
                     self.log(f"train/{key}_mean", upsampled.mean(), on_step=True, prog_bar=False)
                     self.log(f"train/{key}_std", upsampled.std(unbiased=False), on_step=True, prog_bar=False)
@@ -309,15 +326,30 @@ class wnd_unet(BaseModel):
         return self.backbone(x)
 
     def loss_function(self, clean: torch.Tensor, enhanced: torch.Tensor) -> torch.Tensor:
-        return self.loss_fn(enhanced, clean)
+        base = self.loss_fn(enhanced, clean)
+        if self.use_wavelet_conditioner and hasattr(self, "_conditioning_stats"):
+            reg = 0.0
+            for key, (upsampled, coeff) in self._conditioning_stats.items():
+                coeff_repeat = F.interpolate(coeff, size=upsampled.shape[-1], mode="linear", align_corners=False)
+                reg = reg + F.mse_loss(upsampled, coeff_repeat, reduction="mean")
+            return base + 1e-4 * reg
+        return base
+
     
     def configure_gradient_clipping(self, optimizer, optimizer_idx=None, gradient_clip_val=None, gradient_clip_algorithm=None):
         torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0, norm_type=2.0)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), 
-                                    lr=self.learning_rate,
-                                    weight_decay = self.weight_decay)
+        ups_params = list(self.wavelet_upsamplers.parameters()) if self.use_wavelet_conditioner else []
+        base_params = [p for p in self.parameters() if p not in ups_params]
+
+        optimizer = torch.optim.Adam(
+            [
+                {"params": base_params, "lr": self.learning_rate, "weight_decay": self.weight_decay},
+                {"params": ups_params, "lr": self.learning_rate * 0.5, "weight_decay": 0.0},
+            ],
+        )
+
         warmup_steps = 3000
         total_steps = self.trainer.estimated_stepping_batches  # populated after setup
         
