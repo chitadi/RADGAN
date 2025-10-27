@@ -4,10 +4,12 @@ datamodule:
   batch_size: 8
   wavelet: "db1"
   level: 3
-  tag: all
+  tag: stack
 
 model: "wnd_unet"
 model_params:
+  in_channels: 1
+  use_wavelet_conditioner: true
   learning_rate: 0.001
   base_channels: 64
   lr_scheduler_patience: 3

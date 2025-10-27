@@ -19,6 +19,31 @@ def _make_depthwise_conv(in_channels: int, kernel_size: int = 7, padding: int = 
         bias=False,
     )
 
+class WaveletUpsampler(nn.Module):
+    def __init__(self, upsample_factors):
+        super().__init__()
+        layers = []
+        in_ch = out_ch = 1
+        for factor in upsample_factors:
+            layers.append(
+                nn.ConvTranspose1d(
+                    in_ch,
+                    out_ch,
+                    kernel_size=factor * 2,
+                    stride=factor,
+                    padding=factor // 2,
+                )
+            )
+            layers.append(nn.LeakyReLU(0.4, inplace=True))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor, target_len: int) -> torch.Tensor:
+        x = self.net(x)
+        if x.shape[-1] != target_len:
+            x = F.interpolate(x, size=target_len, mode="linear", align_corners=False)
+        return x
+
+
 
 class ConvNeXtBlock1D(nn.Module):
     """
@@ -218,6 +243,8 @@ class wnd_unet(BaseModel):
         lr_scheduler_patience: int = 3,
         lr_scheduler_factor: float = 0.5,
         weight_decay: float = 0.0,
+        in_channels: int = 1, 
+        use_wavelet_conditioner: bool = False
     ):
         super().__init__()
         self.lr_scheduler_patience = lr_scheduler_patience
@@ -231,12 +258,49 @@ class wnd_unet(BaseModel):
             out_channels=out_channels,
         )
         self.loss_fn = nn.MSELoss()
+        self.use_wavelet_conditioner = use_wavelet_conditioner
+        self.wavelet_keys = ("a3", "d3", "d2", "d1")
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dtype != torch.float32:
-            x = x.float()
-        if x.dim() != 3:
-            raise ValueError(f"Expected (B,C,L), got {x.shape}")
+        if self.use_wavelet_conditioner:
+            self.wavelet_upsamplers = nn.ModuleDict(
+                {
+                    "a3": WaveletUpsampler([2, 2, 2]),
+                    "d3": WaveletUpsampler([2, 2, 2]),
+                    "d2": WaveletUpsampler([2, 2]),
+                    "d1": WaveletUpsampler([2]),
+                }
+            )
+            effective_in_channels = in_channels + len(self.wavelet_keys)
+        else:
+            self.wavelet_upsamplers = nn.ModuleDict()
+            effective_in_channels = in_channels
+
+        self.backbone = WnDUNet1D(
+            in_channels=effective_in_channels,
+            base_channels=base_channels,
+            channel_multipliers=channel_multipliers,
+            out_channels=out_channels,
+        )
+
+    def forward(self, x: torch.Tensor | dict[str, torch.Tensor]) -> torch.Tensor:
+        if isinstance(x, dict):
+            if not self.use_wavelet_conditioner:
+                raise ValueError("Received wavelet dict but use_wavelet_conditioner=False.")
+            waveform = x["m_t"].unsqueeze(1).float()
+            target_len = waveform.shape[-1]
+            channels = [waveform]
+            for key in self.wavelet_keys:
+                coeff = x[key].unsqueeze(1).float()
+                upsampled = self.wavelet_upsamplers[key](coeff, target_len)
+                channels.append(upsampled)
+            x = torch.cat(channels, dim=1)
+        else:
+            if x.dtype != torch.float32:
+                x = x.float()
+            if x.dim() != 3:
+                raise ValueError(f"Expected (B,C,L), got {x.shape}")
+            if self.use_wavelet_conditioner:
+                raise ValueError("Tensor input requires use_wavelet_conditioner=False.")
         return self.backbone(x)
 
     def loss_function(self, clean: torch.Tensor, enhanced: torch.Tensor) -> torch.Tensor:
