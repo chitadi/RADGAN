@@ -3,8 +3,8 @@ import os
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning import seed_everything
-from pytorch_lightning.loggers import CSVLogger
-
+from pytorch_lightning.loggers import CSVLogger, WandbLogger
+import wandb
 
 import yaml
 import os
@@ -23,9 +23,18 @@ from utils import safe_open_yaml, stringify
 current_directory = os.path.dirname(__file__)
 python_file_name = os.path.splitext(os.path.basename(__file__))[0]
 
-OUTPUT_DIR = "/results/" 
-CONFIG_FILE = "/src/config/train_wnd_unet.yaml"
+# OUTPUT_DIR = "/results/" 
+OUTPUT_DIR = os.path.join(current_directory, "..", "results")
+CONFIG_FILE = os.path.join(current_directory, "config", "train_wnd_unet.yaml")
+# CONFIG_FILE = "/src/config/train_wnd_unet.yaml"
 # CONFIG_FILE = "/src/config/train_baseline.yaml"
+# CONFIG_FILE = "/src/config/train_diffwave_v1.yaml"
+
+# WandB Configuration
+WANDB_PROJECT = "rase-challenge"  # Project name in WandB
+WANDB_ENTITY = "team-quazo"    # Replace with your WandB team/organization name
+WANDB_API_KEY = "72d48843d3dc81a30bd737bf05e90efff610f190"  # Your API key
+wandb.login(key=WANDB_API_KEY)
 
 def _init_model(model_name, model_params):
     model_cls       = getattr(models, model_name)
@@ -89,15 +98,31 @@ if __name__ == "__main__":
     pl_logger = CSVLogger("logs", name=f"{model_name}_{model_params_str}_fast_dev_run")
 
     logger.info("Running fast development run with single epoch.")
+    
+    # Setup WandB logger
+    wandb_logger = WandbLogger(
+        project=WANDB_PROJECT,
+        entity=WANDB_ENTITY,
+        name=f"{model_name}_{model_params_str}_fast_dev_run",
+        save_dir=save_dir_fast_dev_run,
+        log_model=False
+    ) if WANDB_API_KEY else None
+    
+    # Use both CSV and WandB loggers
+    loggers = [pl_logger]
+    if wandb_logger:
+        loggers.append(wandb_logger)
+    
     trainer = pl.Trainer(
         max_epochs=1,
         default_root_dir=save_dir_fast_dev_run,
         callbacks=[ckpt_callback],
-        logger=pl_logger,
+        logger=loggers,
         gradient_clip_val=0.5,
         limit_train_batches=5,
         limit_val_batches=5,
-        devices=1
+        devices=[1]
+        # track_grad_norm=2
     )
 
     trainer.fit(model, data_module)
@@ -112,14 +137,30 @@ if __name__ == "__main__":
     )
     lr_monitor = LearningRateMonitor(logging_interval='step')
     pl_logger = CSVLogger("logs", name=f"{model_name}_{model_params_str}")
+    
+    # Setup WandB logger for actual training
+    wandb_logger = WandbLogger(
+        project=WANDB_PROJECT,
+        entity=WANDB_ENTITY,
+        name=f"{model_name}_{model_params_str}",
+        save_dir=save_dir,
+        log_model=False
+    ) if WANDB_API_KEY else None
+    
+    # Use both CSV and WandB loggers
+    loggers = [pl_logger]
+    if wandb_logger:
+        loggers.append(wandb_logger)
+    
     trainer = pl.Trainer(
-        max_epochs=100,
+        max_epochs=35,
         default_root_dir=save_dir,
         callbacks=[ckpt_callback, lr_monitor],
-        gradient_clip_val=0.5,
+        gradient_clip_val=1.0,
         log_every_n_steps=50,
-        logger=pl_logger,
-        devices=1
+        logger=loggers,
+        devices=[1]
+        # track_grad_norm=2
     )
 
     model = _init_model(model_name, model_params)

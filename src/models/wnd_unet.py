@@ -245,7 +245,7 @@ class wnd_unet(BaseModel):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), 
                                     lr=self.learning_rate,
-                                    weight_decay = weight_decay)
+                                    weight_decay = self.weight_decay)
         warmup_steps = 1000
         total_steps = self.trainer.estimated_stepping_batches  # populated after setup
         

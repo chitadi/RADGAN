@@ -17,7 +17,44 @@ import math
 from loguru import logger
 from dwt import unify
 
-DATASET_FOLDER = "/data/"
+# DATASET_FOLDER = "/data/"
+DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
+
+def dict_collate_fn(batch):
+    """
+    Custom collate function to handle nested dictionary batching.
+    
+    Handles dictionaries with nested structures like:
+    {
+        "recorded": {"m_t": tensor, "a3": tensor, ...},
+        "clean": tensor,
+        "fs": int,
+        "task": str,
+        "scale": float
+    }
+    """
+    # Extract keys from first sample
+    keys = batch[0].keys()
+    batched = {}
+    
+    for key in keys:
+        if isinstance(batch[0][key], dict):
+            # Handle nested dictionary (wavelet features)
+            batched[key] = {}
+            for sub_key in batch[0][key].keys():
+                # Stack all tensors for this sub_key from all samples in batch
+                batched[key][sub_key] = torch.stack([item[key][sub_key] for item in batch])
+        else:
+            # Handle regular values (tensors, scalars, etc.)
+            values = [item[key] for item in batch]
+            if isinstance(values[0], torch.Tensor):
+                batched[key] = torch.stack(values)
+            else:
+                # Keep non-tensor values as lists (e.g., int, str, float)
+                batched[key] = values
+    
+    return batched
+
 
 class WavPairDataset(Dataset):
     def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, wavelet, level, tag):
@@ -77,8 +114,11 @@ class WavPairDataset(Dataset):
         #     clean_padded = clean_padded.astype(np.float32)
         # else:
         clean_padded = clean_padded.astype(np.float32) / scale
-        features = torch.from_numpy(features).float()
-        target   = torch.from_numpy(clean_padded).float().unsqueeze(0)
+        if self.tag == "stack":
+            features = {key: torch.from_numpy(coeff).float() for key, coeff in features.items()}
+        else:
+            features = torch.from_numpy(features).float()
+        target = torch.from_numpy(clean_padded).float().unsqueeze(0)
         return {"recorded": features, "clean": target, "fs": fs, 
             "task": self.task,
             "scale": scale
@@ -203,12 +243,16 @@ class DataModule(pl.LightningDataModule):
         # shuffle = True if mode == "train" or mode == "val" else False
         shuffle = True if mode == "train" else False
         
+        # Use custom collate function for "stack" mode to handle nested dictionaries
+        collate_fn = dict_collate_fn if self.tag == "stack" else None
+        
         return torch.utils.data.DataLoader(
             self.dataset[mode],
             batch_size=self.batch_size,
             shuffle=shuffle,
             num_workers=self.num_workers,
             pin_memory=True,
+            collate_fn=collate_fn
         )
 
     def train_dataloader(self):

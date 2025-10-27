@@ -5,9 +5,10 @@ from scipy.signal import upfirdn
 # tag = "zeros"
 # tag = "interpolation"
 # tag = "all"
+# tag = "stack"
 
 def upsampler(m_t, coefficients, tag):
-    if tag == "zeros":
+    if tag == "zeros" or tag == "stack":
         upsampling_coefficient = int((len(m_t)/len(coefficients))/2)
         coefficients = upfirdn([1], coefficients, upsampling_coefficient)
         #for padding to target length
@@ -48,7 +49,16 @@ def get_wavelet_coefficients(m_t, wavelet, level, tag):
         d1_upsampled = upsampler(m_t,d1, tag)
 
         return(a3_upsampled,d3_upsampled,d2_upsampled,d1_upsampled)
-    
+
+    elif tag == "stack":
+        coeffs = pywt.wavedec(m_t,wavelet,level=level, mode = 'symmetric')
+        a3,d3,d2,d1 = coeffs
+        a3=np.array(a3)
+        d3=np.array(d3)
+        d2=np.array(d2)
+        d1=np.array(d1)
+        return (a3,d3,d2,d1)
+
     elif(tag == "all"):
         coeffs = pywt.wavedec(m_t,wavelet,level=level, mode = 'symmetric')
         a3,d3,d2,d1 = coeffs
@@ -70,11 +80,26 @@ def unify(m_t, wavelet='db1', level=3, tag = "zeros"):
     m_t, max_abs = normalize(m_t)
 
     a3,d3,d2,d1 = get_wavelet_coefficients(m_t, wavelet, level,tag)
+    # if tag == "stack":
+    a3, max_a3 = normalize(a3)
+    d3, max_d3 = normalize(d3)
+    d2, max_d2 = normalize(d2)
+    d1, max_d1 = normalize(d1)
+    
     row1 = m_t
     
     #input to the model
     if tag == "zeros" or tag == "interpolation":
         row2 = np.concatenate([a3,d3])
+    elif tag == "stack":
+        input_array = {
+            "m_t": m_t,
+            "a3": a3,
+            "d3": d3,
+            "d2": d2,
+            "d1": d1
+        }
+        return input_array, max_abs
     else:
         row2 = np.concatenate([a3,d3,d2,d1])
     assert row2.shape[0] == row1.shape[0], "Shapes do not match!"
