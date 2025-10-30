@@ -85,7 +85,9 @@ class WavPairDataset(Dataset):
 class DataModule(pl.LightningDataModule):
     def __init__(self, 
         batch_size,
-        length_sec
+        length_sec,
+        num_workers=0,
+        pin_memory=False
         ):
         super().__init__()
 
@@ -94,6 +96,8 @@ class DataModule(pl.LightningDataModule):
         self.length_sec = length_sec
         # self.pairs = self.get_file_paths()
         self.dataset = {"train": [], "val": [], "test": []}
+        self.num_workers = num_workers
+        self.pin_memory = pin_memory
     # def print_summary(self):
 
     #     for mode in self.modes:
@@ -164,12 +168,14 @@ class DataModule(pl.LightningDataModule):
         
     def data_loader(self, mode):
 
-        shuffle = True if mode == "train" or mode == "val" else False
+        shuffle = True if mode == "train" else False
         
         return torch.utils.data.DataLoader(
             self.dataset[mode], 
             batch_size=self.batch_size, 
-            shuffle=shuffle)
+            shuffle=shuffle,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,)
 
     def train_dataloader(self):
         return self.data_loader("train")
