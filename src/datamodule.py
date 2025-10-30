@@ -15,57 +15,15 @@ import torchaudio
 from utils import safe_open_yaml
 import math
 from loguru import logger
-from dwt import unify
 
-# DATASET_FOLDER = "/data/"
-DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
-
-def dict_collate_fn(batch):
-    """
-    Custom collate function to handle nested dictionary batching.
-    
-    Handles dictionaries with nested structures like:
-    {
-        "recorded": {"m_t": tensor, "a3": tensor, ...},
-        "clean": tensor,
-        "fs": int,
-        "task": str,
-        "scale": float
-    }
-    """
-    # Extract keys from first sample
-    keys = batch[0].keys()
-    batched = {}
-    
-    for key in keys:
-        if isinstance(batch[0][key], dict):
-            # Handle nested dictionary (wavelet features)
-            batched[key] = {}
-            for sub_key in batch[0][key].keys():
-                # Stack all tensors for this sub_key from all samples in batch
-                batched[key][sub_key] = torch.stack([item[key][sub_key] for item in batch])
-        else:
-            # Handle regular values (tensors, scalars, etc.)
-            values = [item[key] for item in batch]
-            if isinstance(values[0], torch.Tensor):
-                batched[key] = torch.stack(values)
-            else:
-                # Keep non-tensor values as lists (e.g., int, str, float)
-                batched[key] = values
-    
-    return batched
-
+DATASET_FOLDER = "/data/"
 
 class WavPairDataset(Dataset):
-    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, wavelet, level, tag):
+    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
         self.task = task
         self.length_sec = length_sec
-        # specifically for wavelets
-        self.wavelet = wavelet
-        self.level = level
-        self.tag = tag
         assert len(self.recorded_wav_filepaths) == len(self.clean_wav_filepaths) 
         assert len(self.recorded_wav_filepaths) > 0
     def __getitem__(self, idx):
@@ -81,48 +39,45 @@ class WavPairDataset(Dataset):
 
         # temporarily cut off to align later
         recorded = recorded[:len(clean)]
-        # print(f"After alignment - Recorded: {recorded.shape}, Clean: {clean.shape}")
-        assert len(recorded) == len(clean)
-        start_time = 1
-        assert len(recorded) >= (start_time + self.length_sec) * fs
 
         sample_length = self.length_sec * fs
 
         recorded_padded = np.zeros(sample_length, dtype=np.float32)
         clean_padded    = np.zeros(sample_length, dtype=np.float32)
-
-        # if len(recorded) > sample_length:
-        # if len(recorded) > sample_length + start_time * fs:
-            # recorded_padded = recorded[:sample_length]
-        recorded_padded = recorded[start_time * fs : sample_length + start_time * fs]
-        # else:
-        #     # recorded_padded[:len(recorded)] = recorded
-        #     recorded_padded[start_time * fs : len(recorded)] = recorded
-
-
-        # if len(clean) > sample_length:
-        # if len(clean) > sample_length + start_time * fs:
-            # clean_padded = clean[:sample_lenth]
-        clean_padded = clean[start_time * fs : sample_length + start_time * fs]
-        # else:
-        #     # clean_padded = clean[:len(clean)]
-        #     clean_padded[start_time * fs : len(clean)] = clean
-
-        #  call the dwt function here and then add it to this dictionary for returning
-        features, scale = unify(recorded_padded, wavelet=self.wavelet, level=self.level, tag=self.tag)
-        # if is_silent:
-        #     clean_padded = clean_padded.astype(np.float32)
-        # else:
-        clean_padded = clean_padded.astype(np.float32) / scale
-        if self.tag == "stack":
-            features = {key: torch.from_numpy(coeff).float() for key, coeff in features.items()}
+        
+        if len(recorded) > sample_length:
+            recorded_padded = recorded[:sample_length]
         else:
-            features = torch.from_numpy(features).float()
-        target = torch.from_numpy(clean_padded).float().unsqueeze(0)
-        return {"recorded": features, "clean": target, "fs": fs, 
+            recorded_padded[:len(recorded)] = recorded
+
+
+        if len(clean) > sample_length:
+            clean_padded = clean[:sample_length]
+        else:
+            clean_padded[:len(clean)] = clean
+
+        # converting to a tensor for new pipeline
+        recorded_tensor = torch.from_numpy(recorded_padded)
+        clean_tensor = torch.from_numpy(clean_padded)
+
+        # can change this to 1e-10 as well
+        scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
+        scale = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
+
+        recorded_tensor = recorded_tensor / scale
+        clean_tensor = clean_tensor / scale
+
+        return {
+            "recorded": recorded_tensor,
+            "clean": clean_tensor,
+            "scale": scale,
+            "fs": fs,
             "task": self.task,
-            "scale": scale
         }
+        
+        # return {"recorded": recorded_padded, "clean": clean_padded, "fs": fs, 
+        #     "task": self.task
+        # }
 
     def __len__(self):
         return len(self.recorded_wav_filepaths)
@@ -130,24 +85,15 @@ class WavPairDataset(Dataset):
 class DataModule(pl.LightningDataModule):
     def __init__(self, 
         batch_size,
-        length_sec, 
-        wavelet="db1", 
-        level=3, 
-        tag="all",
-        num_workers=4
+        length_sec
         ):
         super().__init__()
 
-        # for wavelets
-        self.wavelet = wavelet
-        self.level = level
-        self.tag = tag
-        # normal processing
+
         self.batch_size = batch_size
         self.length_sec = length_sec
         # self.pairs = self.get_file_paths()
         self.dataset = {"train": [], "val": [], "test": []}
-        self.num_workers = num_workers
     # def print_summary(self):
 
     #     for mode in self.modes:
@@ -164,12 +110,11 @@ class DataModule(pl.LightningDataModule):
         
         assert os.path.exists(DATASET_FOLDER)
 
-        task_folders = os.listdir(DATASET_FOLDER)
+        # sorting everything for reproducable results
+        task_folders = sorted(os.listdir(DATASET_FOLDER))
         logger.info(f"The available tasks are {task_folders}")
         logger.info(f"Loading dataset")
-
-        # Initialize dataset dict with lists
-        self.dataset = {"train": [], "val": [], "test": []}
+        
         
         for task in task_folders:
             
@@ -178,15 +123,15 @@ class DataModule(pl.LightningDataModule):
             clean_folder = os.path.join(folder_path, "Clean")
             recorded_folder = os.path.join(folder_path, "Recorded")
 
-            for mode in os.listdir(recorded_folder):
+            for mode in sorted(os.listdir(recorded_folder)):
                 
                 
                 folder_path = os.path.join(recorded_folder, mode)
-                files = os.listdir(folder_path)
+                files = sorted(os.listdir(folder_path))
                 
                 # filter all recorded files with ext ".wav" 
                 is_wav = lambda filename: os.path.splitext(filename)[-1] == ".wav" 
-                wav_filenames = [_file for _file in files if is_wav(_file)]  
+                wav_filenames = sorted(_file for _file in files if is_wav(_file))  
                 recorded_wav_filepaths = [os.path.join(recorded_folder, mode, _file) for _file in wav_filenames]
 
                 file_exists = [os.path.exists(filepath) for filepath in recorded_wav_filepaths]
@@ -201,32 +146,11 @@ class DataModule(pl.LightningDataModule):
                 assert len(recorded_wav_filepaths) == len(clean_wav_filepaths)
                 
                 logger.info(f"{mode}: {len(recorded_wav_filepaths)} wav files.")
-
-                self.dataset[mode].append(
-                    WavPairDataset(
-                        recorded_wav_filepaths,
-                        clean_wav_filepaths,
-                        task=task,
-                        length_sec=self.length_sec,
-                        wavelet=self.wavelet,
-                        level=self.level,
-                        tag=self.tag,
-                    )
-                )
-
-        # turn the per-mode lists into a single dataset for each loader
-        for mode, datasets in self.dataset.items():
-            if datasets and not isinstance(datasets, ConcatDataset):
-                self.dataset[mode] = ConcatDataset(datasets)
-
                 
-                # self.dataset[mode] += WavPairDataset(recorded_wav_filepaths, 
-                #     clean_wav_filepaths, 
-                #     task=task, 
-                #     length_sec=self.length_sec,
-                #     wavelet=self.wavelet,
-                #     level=self.level,
-                #     tag=self.tag,)
+                self.dataset[mode] += WavPairDataset(recorded_wav_filepaths, 
+                    clean_wav_filepaths, 
+                    task=task, 
+                    length_sec=self.length_sec)
 
                 # if mode == "train":
                 #     self.dataset["train"] 
@@ -240,20 +164,12 @@ class DataModule(pl.LightningDataModule):
         
     def data_loader(self, mode):
 
-        # shuffle = True if mode == "train" or mode == "val" else False
-        shuffle = True if mode == "train" else False
-        
-        # Use custom collate function for "stack" mode to handle nested dictionaries
-        collate_fn = dict_collate_fn if self.tag == "stack" else None
+        shuffle = True if mode == "train" or mode == "val" else False
         
         return torch.utils.data.DataLoader(
-            self.dataset[mode],
-            batch_size=self.batch_size,
-            shuffle=shuffle,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            collate_fn=collate_fn
-        )
+            self.dataset[mode], 
+            batch_size=self.batch_size, 
+            shuffle=shuffle)
 
     def train_dataloader(self):
         return self.data_loader("train")

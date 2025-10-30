@@ -1,0 +1,36 @@
+datamodule:
+  length_sec: 4
+  batch_size: 8
+
+model: "dcctn"        # new LightningModule wrapping Network.DCCTN
+model_params:
+  learning_rate: 3.0e-4
+  weight_decay: 1.0e-5
+  betas: [0.5, 0.999]
+  stft_loss_config:
+    fft_size: 320
+    hop_size: 80
+    win_length: 320
+    scale_invariance: false
+    w_sc: 0.0
+    weight: 50.0
+
+trainer:
+  fast_dev:
+    max_epochs: 1
+    limit_train_batches: 5
+    limit_val_batches: 5
+    gradient_clip_val: 0.5
+    devices: [0]
+    accelerator: "gpu"
+  full:
+    max_epochs: 100
+    gradient_clip_val: 10.0
+    accumulate_grad_batches: 8
+    strategy: "ddp"
+    devices: [0]        # list for multi-GPU
+    accelerator: "gpu"
+  logging:
+    use_wandb: true
+    log_every_n_steps: 50
+evaluate_test: false    # flip on to mimic DCCTN/test.py score dump

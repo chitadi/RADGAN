@@ -68,30 +68,11 @@ def get_wavelet_coefficients(m_t, wavelet, level, tag):
         d1=np.array(d1)
         return (a3,d3,d2,d1)
 
-# def normalize(m_t, eps: float = 1e-8, silence_threshold: float = 1e-4):
-#     max_abs = np.max(np.abs(m_t))
-#     if max_abs < silence_threshold:
-#         return m_t.astype(np.float32), 1.0
-#     scale = max(max_abs, eps)
-#     return m_t.astype(np.float32) / scale, scale
-
-def normalize(m_t, mode: str = "rms", percentile: float = 99.5, clip_mult: float = 5.0,
-              eps: float = 1e-8, silence_threshold: float = 1e-4):
-    abs_vals = np.abs(m_t)
-    if abs_vals.max() < silence_threshold:
+def normalize(m_t, eps: float = 1e-8, silence_threshold: float = 1e-4):
+    max_abs = np.max(np.abs(m_t))
+    if max_abs < silence_threshold:
         return m_t.astype(np.float32), 1.0
-
-    if mode == "percentile":
-        scale = np.percentile(abs_vals, percentile)
-    elif mode == "rms":
-        scale = np.sqrt(np.mean(abs_vals ** 2))
-    else:
-        scale = abs_vals.max()
-
-    median = np.median(abs_vals)
-    max_allowed = max(median * clip_mult, eps)
-    scale = np.clip(scale, eps, max_allowed)
-
+    scale = max(max_abs, eps)
     return m_t.astype(np.float32) / scale, scale
     
 def unify(m_t, wavelet='db1', level=3, tag = "zeros"):

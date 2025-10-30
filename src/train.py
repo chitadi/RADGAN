@@ -25,7 +25,7 @@ python_file_name = os.path.splitext(os.path.basename(__file__))[0]
 
 # OUTPUT_DIR = "/results/" 
 OUTPUT_DIR = os.path.join(current_directory, "..", "results")
-CONFIG_FILE = os.path.join(current_directory, "config", "train_wnd_unet.yaml")
+CONFIG_FILE = os.path.join(current_directory, "config", "train_dcctn.yaml")
 # CONFIG_FILE = "/src/config/train_wnd_unet.yaml"
 # CONFIG_FILE = "/src/config/train_baseline.yaml"
 # CONFIG_FILE = "/src/config/train_diffwave_v1.yaml"
@@ -41,6 +41,31 @@ def _init_model(model_name, model_params):
     model           = model_cls(**model_params)
 
     return model
+
+def _build_trainer(trainer_cfg: dict, default_root_dir: str, loggers, callbacks):
+    """Create a Trainer using only the fields supplied in trainer_cfg."""
+    trainer_kwargs = {
+        "default_root_dir": default_root_dir,
+        "logger": loggers,
+        "callbacks": list(callbacks),
+    }
+    allowed_keys = {
+        "max_epochs",
+        "limit_train_batches",
+        "limit_val_batches",
+        "gradient_clip_val",
+        "gradient_clip_algorithm",
+        "log_every_n_steps",
+        "devices",
+        "accelerator",
+        "strategy",
+        "accumulate_grad_batches",
+    }
+    for key in allowed_keys:
+        if key in trainer_cfg:
+            trainer_kwargs[key] = trainer_cfg[key]
+    return pl.Trainer(**trainer_kwargs)
+
 
 def _validate(trainer, data_module, model_name, best_ckpt, model_params, save_dir, fast_dev_run=True):
 
@@ -113,18 +138,28 @@ if __name__ == "__main__":
     if wandb_logger:
         loggers.append(wandb_logger)
     
-    trainer = pl.Trainer(
-        max_epochs=1,
+    # uncomment the following trainer for non-dcctn models
+    # trainer = pl.Trainer(
+    #     max_epochs=1,
+    #     default_root_dir=save_dir_fast_dev_run,
+    #     callbacks=[ckpt_callback],
+    #     logger=loggers,
+    #     gradient_clip_val=0.5,
+    #     gradient_clip_algorithm="norm",
+    #     limit_train_batches=5,
+    #     limit_val_batches=5,
+    #     devices=[1]
+    #     # track_grad_norm=2
+    # )
+    logging_cfg = config["trainer"].get("logging", {})
+    fast_trainer_cfg = {**config["trainer"]["fast_dev"], **logging_cfg}
+    trainer = _build_trainer(
+        fast_trainer_cfg,
         default_root_dir=save_dir_fast_dev_run,
+        loggers=loggers,
         callbacks=[ckpt_callback],
-        logger=loggers,
-        gradient_clip_val=0.5,
-        gradient_clip_algorithm="norm",
-        limit_train_batches=5,
-        limit_val_batches=5,
-        devices=[1]
-        # track_grad_norm=2
     )
+
 
     trainer.fit(model, data_module)
     _validate(trainer, data_module, model_name, ckpt_callback.best_model_path, model_params, save_dir_fast_dev_run, fast_dev_run=True)
@@ -153,16 +188,25 @@ if __name__ == "__main__":
     if wandb_logger:
         loggers.append(wandb_logger)
     
-    trainer = pl.Trainer(
-        max_epochs=35,
+    # uncomment the following trainer for non-dcctn models
+    # trainer = pl.Trainer(
+    #     max_epochs=35,
+    #     default_root_dir=save_dir,
+    #     callbacks=[ckpt_callback, lr_monitor],
+    #     gradient_clip_val=1.0,
+    #     gradient_clip_algorithm="norm",
+    #     log_every_n_steps=50,
+    #     logger=loggers,
+    #     devices=[1]
+    #     # track_grad_norm=2
+    # )
+    logging_cfg = config["trainer"].get("logging", {})
+    full_trainer_cfg = {**config["trainer"]["full"], **logging_cfg}
+    trainer = _build_trainer(
+        full_trainer_cfg,
         default_root_dir=save_dir,
+        loggers=loggers,
         callbacks=[ckpt_callback, lr_monitor],
-        gradient_clip_val=1.0,
-        gradient_clip_algorithm="norm",
-        log_every_n_steps=50,
-        logger=loggers,
-        devices=[1]
-        # track_grad_norm=2
     )
 
     model = _init_model(model_name, model_params)
