@@ -4,10 +4,10 @@ import seaborn as sns
 import os
 from utils import safe_open_yaml, stringify
 
-CONFIG_FILE = "/src/config/train_baseline.yaml"
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config/train_dcctn.yaml")
 
 config = safe_open_yaml(CONFIG_FILE)
-version = 10
+version = 8
 
 model_name = config["model"]
 model_params = config["model_params"]

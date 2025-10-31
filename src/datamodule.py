@@ -16,8 +16,8 @@ from utils import safe_open_yaml
 import math
 from loguru import logger
 
-DATASET_FOLDER = "/data/"
-
+# DATASET_FOLDER = "/data/"
+DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
 class WavPairDataset(Dataset):
     def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec):
         self.recorded_wav_filepaths = recorded_wav_filepaths
