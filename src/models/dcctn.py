@@ -5,9 +5,11 @@ else:
     from .base_model import BaseModel
 
 import torch
+import torch.nn.functional as F
 from auraloss.time import SISDRLoss
 from auraloss.freq import STFTLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from pytorch_lightning.loggers import WandbLogger
 from typing import Any, Dict, Optional
 
 class DCCTN(BaseModel):
@@ -43,6 +45,20 @@ class DCCTN(BaseModel):
         self._stft_weight = stft_cfg.pop("weight", 25.0)
         self.si_sdr_loss = SISDRLoss()
         self.stft_loss = STFTLoss(**stft_cfg) if stft_cfg else STFTLoss()
+        
+        self._diag_cfg = {
+          "fft_size": stft_cfg.get("fft_size", 128),
+          "hop_size": stft_cfg.get("hop_size", 64),
+          "win_length": stft_cfg.get("win_length", stft_cfg.get("fft_size", 128)),
+        }
+        self.register_buffer(
+            "diag_window",
+            torch.hann_window(self._diag_cfg["win_length"], periodic=False),
+            persistent=False,
+        )
+        self._band_edges = [(0, 1_000), (1_000, 3_000), (3_000, 4_000)]
+        self._diag_eps = 1e-7
+
 
         self.loss_function = self._combined_loss
         self.save_hyperparameters(ignore=["backbone"])
@@ -66,6 +82,122 @@ class DCCTN(BaseModel):
             self.si_sdr_loss(clean, enhanced)
             + self._stft_weight * self.stft_loss(clean_for_stft, enhanced_for_stft)
         )
+    
+    def _log_diagnostics(self, clean, enhanced, batch, mode: str, batch_idx: int) -> None:
+        cfg = self._diag_cfg
+        window = self.diag_window.to(clean.device)
+
+        clean_spec = torch.stft(clean, cfg["fft_size"], cfg["hop_size"],
+                                cfg["win_length"], window=window,
+                                return_complex=True, center=True)
+        enh_spec = torch.stft(enhanced, cfg["fft_size"], cfg["hop_size"],
+                              cfg["win_length"], window=window,
+                              return_complex=True, center=True)
+
+        mag_clean = clean_spec.abs().clamp_min(self._diag_eps)
+        mag_enh = enh_spec.abs().clamp_min(self._diag_eps)
+        residual_pow = (enh_spec - clean_spec).abs().pow(2)
+
+        delta_mag = (mag_enh - mag_clean).flatten(1)
+        stft_sc = torch.linalg.norm(delta_mag, dim=1) / (
+            torch.linalg.norm(mag_clean.flatten(1), dim=1).clamp_min(self._diag_eps)
+        )
+        stft_logmag = F.l1_loss(torch.log(mag_enh), torch.log(mag_clean),
+                                reduction="none").mean(dim=(1, 2))
+        sisdr = -self.si_sdr_loss(clean, enhanced).detach()
+
+        scale = batch["scale"]
+        if not isinstance(scale, torch.Tensor):
+            scale = torch.tensor(scale, device=clean.device, dtype=clean.dtype)
+        else:
+            scale = scale.to(clean.device, clean.dtype)
+        clean_dn = clean * scale.unsqueeze(-1)
+        enh_dn = enhanced * scale.unsqueeze(-1)
+        mfcc_cos = torch.tensor(
+            [self.csmfcc_fn(c.cpu().numpy(), e.cpu().numpy())
+             for c, e in zip(clean_dn.detach(), enh_dn.detach())],
+            device=clean.device,
+            dtype=clean.dtype,
+        )
+
+        batch_sz = clean.size(0)
+        self.log(f"{mode}/sisdr", sisdr.mean(), prog_bar=(mode == "val"), batch_size=batch_sz)
+        self.log(f"{mode}/stft_sc", stft_sc.mean(), batch_size=batch_sz)
+        self.log(f"{mode}/stft_logmag", stft_logmag.mean(), batch_size=batch_sz)
+        self.log(f"{mode}/mfcc_cos", mfcc_cos.mean(), batch_size=batch_sz)
+
+        fs = batch.get("fs", 8000.0)
+        if isinstance(fs, torch.Tensor):
+            fs = float(fs.flatten()[0].item())
+        elif isinstance(fs, (list, tuple)):
+            fs = float(fs[0])
+
+        freqs = torch.linspace(0.0, fs / 2.0, steps=residual_pow.size(1), device=residual_pow.device)
+        band_curves = []
+        for low, high in self._band_edges:
+            high = min(high, fs / 2.0)
+            mask = (freqs >= low) & (freqs < high)
+            if mask.any():
+                band_curves.append(residual_pow[:, mask].mean(dim=1))
+            else:
+                band_curves.append(torch.zeros(batch_sz, residual_pow.size(2), device=residual_pow.device))
+        band_curves = torch.stack(band_curves, dim=1)
+
+        band_means = band_curves.mean(dim=(0, 2))
+        for (low, high), mean_val in zip(self._band_edges, band_means):
+            high = min(high, fs / 2.0)
+            tag = f"{int(low // 1000)}-{int(high // 1000)}k"
+            self.log(f"{mode}/band_residual_{tag}", mean_val, batch_size=batch_sz)
+
+        time_profile = band_curves.sum(dim=1)   # (B, frames)
+        onset_peak = time_profile.max(dim=1).values.mean()
+        sorted_tp = torch.sort(time_profile, dim=1).values
+        top_idx = max(0, min(int(0.95 * (sorted_tp.size(-1) - 1)), sorted_tp.size(-1) - 1))
+        top_idx = torch.full(
+            (sorted_tp.size(0), 1),
+            top_idx,
+            device=sorted_tp.device,
+            dtype=torch.long,
+        )
+        onset_p95 = sorted_tp.gather(1, top_idx).squeeze(-1).mean()
+
+        self.log(f"{mode}/onset_error_peak", onset_peak, batch_size=batch_sz)
+        self.log(f"{mode}/onset_error_p95", onset_p95, batch_size=batch_sz)
+
+        wandb_logger = None
+        if isinstance(self.logger, WandbLogger):
+            wandb_logger = self.logger
+        else:
+            for lg in getattr(self.logger, "loggers", []):
+                if isinstance(lg, WandbLogger):
+                    wandb_logger = lg
+                    break
+
+        if wandb_logger is not None and batch_idx == 0:
+            import wandb
+            heatmap = 10.0 * torch.log10(band_curves.mean(dim=0).clamp_min(self._diag_eps)).cpu().numpy()
+            wandb_logger.experiment.log(
+                {f"{mode}/band_error_heatmap": wandb.Image(heatmap, caption="Residual band error (dB)")},
+                commit=False,
+            )
+    
+    def validation_step(self, batch, batch_idx):
+        enhanced, clean, task = self.common_step(batch, batch_idx, mode="val")
+        loss = self.loss_function(clean, enhanced)
+        self.log("val/loss", loss, logger=True)
+        with torch.no_grad():
+            self._log_diagnostics(clean, enhanced, batch, mode="val", batch_idx=batch_idx)
+        if self.heavy_eval:
+            self.val_outputs.append(enhanced.detach().cpu().numpy())
+            self.val_targets.append(clean.detach().cpu().numpy())
+            self.val_tasks.append(task)
+            scale = batch["scale"]
+            if isinstance(scale, torch.Tensor):
+                scale = scale.detach().cpu().numpy()
+            else:
+                scale = np.asarray(scale)
+            self.val_scales.append(scale)
+        return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
