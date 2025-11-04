@@ -7,13 +7,32 @@ model_params:
   learning_rate: 1.0e-4
   weight_decay: 1.0e-5
   betas: [0.5, 0.999]
+  # stft_loss_config:
+  #   fft_size: 256
+  #   hop_size: 128
+  #   win_length: 256
+  #   scale_invariance: false
+  #   w_sc: 1.0
+  #   weight: 5.0
   stft_loss_config:
-    fft_size: 128
-    hop_size: 64
-    win_length: 128
-    scale_invariance: false
-    w_sc: 0.0
-    weight: 75.0
+    kind: "multi"
+    fft_sizes: [256, 512, 1024]
+    hop_sizes: [64, 128, 256]
+    win_lengths: [256, 512, 1024]
+    w_log_mag: 1.0
+    w_sc: 1.0 
+    weight: 1.0
+  # for random-resolution STFT
+  # stft_loss_config:
+  #   kind: "random"
+  #   fft_sizes: [256, 512, 1024]
+  #   hop_sizes: [64, 128, 256]
+  #   win_lengths: [256, 512, 1024]
+  #   n_resolutions: 3
+  #   w_log_mag: 1.0
+  #   w_sc: 1.0  
+  #   weight: 1.0
+
 
 trainer:
   fast_dev:
