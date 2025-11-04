@@ -25,8 +25,8 @@ model_params:
   # for random-resolution STFT
   stft_loss_config:
     kind: "random"
-    n_ffts: [256, 512, 1024]
-    hop_lengths: [64, 128, 256]
+    fft_sizes: [256, 512, 1024]
+    hop_sizes: [64, 128, 256]
     win_lengths: [256, 512, 1024]
     n_resolutions: 3
     w_mag: 1.0
