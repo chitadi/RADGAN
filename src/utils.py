@@ -1,4 +1,4 @@
-
+import hashlib
 import yaml
 
 def safe_open_yaml(yaml_file, verbose=False):
@@ -16,8 +16,19 @@ def safe_open_yaml(yaml_file, verbose=False):
     return yaml_data
 
 
-def stringify(input_dict, delimiter):
-    output_string = ""
-    for key, value in input_dict.items():
-        output_string += f"{delimiter}{key}={value}"
-    return output_string
+def stringify(values: dict, delimiter: str = "_") -> str:
+    pieces = []
+    for key, value in values.items():
+        if isinstance(value, dict):
+            payload = yaml.safe_dump(value, sort_keys=True)
+            digest = hashlib.md5(payload.encode("utf-8")).hexdigest()[:8]
+            hint = value.get("kind", "cfg")
+            display = f"{hint}-{digest}"
+        elif isinstance(value, (list, tuple, set)):
+            payload = yaml.safe_dump({"value": list(value)}, sort_keys=True)
+            digest = hashlib.md5(payload.encode("utf-8")).hexdigest()[:8]
+            display = digest
+        else:
+            display = str(value)
+        pieces.append(f"{key}={display}")
+    return delimiter.join(pieces)
