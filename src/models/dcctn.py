@@ -7,7 +7,7 @@ else:
 import torch
 import torch.nn.functional as F
 from auraloss.time import SISDRLoss
-from auraloss.freq import STFTLoss
+from auraloss.freq import STFTLoss, MultiResolutionSTFTLoss, RandomResolutionSTFTLoss, MelSTFTLoss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from pytorch_lightning.loggers import WandbLogger
 from typing import Any, Dict, Optional
@@ -44,7 +44,17 @@ class DCCTN(BaseModel):
         stft_cfg = stft_loss_config.copy() if stft_loss_config else {}
         self._stft_weight = stft_cfg.pop("weight", 25.0)
         self.si_sdr_loss = SISDRLoss()
-        self.stft_loss = STFTLoss(**stft_cfg) if stft_cfg else STFTLoss()
+        # self.stft_loss = STFTLoss(**stft_cfg) if stft_cfg else STFTLoss()
+        loss_kind = stft_cfg.pop("kind", "single")
+        if loss_kind == "multi":
+            self.stft_loss = MultiResolutionSTFTLoss(**stft_cfg)
+        elif loss_kind == "random":
+            self.stft_loss = RandomResolutionSTFTLoss(**stft_cfg)
+        elif loss_kind == "mel":
+            self.stft_loss = MelSTFTLoss(**stft_cfg)
+        else:
+            self.stft_loss = STFTLoss(**stft_cfg)
+
         
         self._diag_cfg = {
           "fft_size": stft_cfg.get("fft_size", 128),
