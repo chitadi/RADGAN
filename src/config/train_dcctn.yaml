@@ -14,24 +14,24 @@ model_params:
   #   scale_invariance: false
   #   w_sc: 1.0
   #   weight: 5.0
-  stft_loss_config:
-    kind: "multi"
-    fft_sizes: [256, 512, 1024]
-    hop_sizes: [64, 128, 256]
-    win_lengths: [256, 512, 1024]
-    w_log_mag: 1.0
-    w_sc: 1.0 
-    weight: 1.0
-  # for random-resolution STFT
   # stft_loss_config:
-  #   kind: "random"
+  #   kind: "multi"
   #   fft_sizes: [256, 512, 1024]
   #   hop_sizes: [64, 128, 256]
   #   win_lengths: [256, 512, 1024]
-  #   n_resolutions: 3
   #   w_log_mag: 1.0
-  #   w_sc: 1.0  
+  #   w_sc: 1.0 
   #   weight: 1.0
+  # for random-resolution STFT
+  stft_loss_config:
+    kind: "random"
+    fft_sizes: [256, 512, 1024]
+    hop_sizes: [64, 128, 256]
+    win_lengths: [256, 512, 1024]
+    n_resolutions: 3
+    w_log_mag: 1.0
+    w_sc: 1.0  
+    weight: 1.0
 
 
 trainer:
