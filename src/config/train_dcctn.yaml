@@ -25,12 +25,14 @@ model_params:
   # for random-resolution STFT
   stft_loss_config:
     kind: "random"
-    fft_sizes: [256, 512, 1024]
-    hop_sizes: [64, 128, 256]
-    win_lengths: [256, 512, 1024]
-    n_resolutions: 3
-    w_mag: 1.0
+    resolutions: 3          # matches the `resolutions` arg
+    min_fft_size: 256
+    max_fft_size: 1024      # keep this ≤32 000 for 4 s @ 8 kHz
+    min_hop_size: 0.25      # proportion of window; tweak as needed
+    max_hop_size: 0.5
     w_sc: 1.0
+    w_log_mag: 1.0          # RandomResolutionSTFTLoss expects these weights
+    w_lin_mag: 0.0
     weight: 1.0
 
 
