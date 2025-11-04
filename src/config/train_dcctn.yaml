@@ -40,14 +40,15 @@ trainer:
     limit_train_batches: 5
     limit_val_batches: 5
     gradient_clip_val: 0.5
-    devices: [0]
+    strategy: "ddp"
+    devices: [0, 1]
     accelerator: "gpu"
   full:
     max_epochs: 20
     gradient_clip_val: 10.0
     accumulate_grad_batches: 8
-    # strategy: "ddp_find_unused_parameters_true"
-    devices: [0]        # list for multi-GPU
+    strategy: "ddp"
+    devices: [0, 1]        # list for multi-GPU
     accelerator: "gpu"
   logging:
     use_wandb: true

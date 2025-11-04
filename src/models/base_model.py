@@ -165,17 +165,17 @@ class BaseModel(pl.LightningModule):
 
         # weighted_score_vals * task_weightage 
         # Log averaged results
-        self.log(f"{mode}/pesq", torch.tensor(pesq_vals).mean(),
+        self.log(f"{mode}/pesq", torch.tensor(pesq_vals, device=self.device).mean(),
                  prog_bar=True, sync_dist=True)
-        self.log(f"{mode}/estoi", torch.tensor(estoi_vals).mean(),
+        self.log(f"{mode}/estoi", torch.tensor(estoi_vals, device=self.device).mean(),
                  prog_bar=True, sync_dist=True)
-        self.log(f"{mode}/dnsmos", torch.tensor(dnsmos_vals).mean(),
+        self.log(f"{mode}/dnsmos", torch.tensor(dnsmos_vals, device=self.device).mean(),
                  prog_bar=True, sync_dist=True)
-        self.log(f"{mode}/csmfcc", torch.tensor(csmfcc_vals).mean(),
+        self.log(f"{mode}/csmfcc", torch.tensor(csmfcc_vals, device=self.device).mean(),
                  prog_bar=True, sync_dist=True)
         
-        task1_score = torch.tensor(task1_scores_vals).mean()
-        task2_score = torch.tensor(task2_scores_vals).mean()
+        task1_score = torch.tensor(task1_scores_vals, device=self.device).mean()
+        task2_score = torch.tensor(task2_scores_vals, device=self.device).mean()
         
         self.log(f"{mode}/task1_score", task1_score,
                 prog_bar=True, sync_dist=True)
