@@ -1,6 +1,6 @@
 datamodule:
   length_sec: 4
-  batch_size: 32
+  batch_size: 16
 
 model: "dcctn"        # new LightningModule wrapping Network.DCCTN
 model_params:
@@ -40,15 +40,15 @@ trainer:
     limit_train_batches: 5
     limit_val_batches: 5
     gradient_clip_val: 0.5
-    strategy: "ddp_spawn"
-    devices: [0, 1]
+    # strategy: "ddp_spawn"
+    devices: [0]
     accelerator: "gpu"
   full:
     max_epochs: 20
     gradient_clip_val: 10.0
     accumulate_grad_batches: 8
-    strategy: "ddp"
-    devices: [0, 1]        # list for multi-GPU
+    # strategy: "ddp"
+    devices: [0]        # list for multi-GPU
     accelerator: "gpu"
   logging:
     use_wandb: true
