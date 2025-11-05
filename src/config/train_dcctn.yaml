@@ -37,6 +37,7 @@ model_params:
   #   weight: 1.0
   stft_loss_config:
     kind: "mel"
+    sample_rate: 8000
     fft_size: 256
     hop_size: 128
     win_length: 256
