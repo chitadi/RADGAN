@@ -6,15 +6,15 @@ model: "dcctn"        # new LightningModule wrapping Network.DCCTN
 model_params:
   learning_rate: 1.0e-4
   # change this back
-  weight_decay: 1.0e-4
+  weight_decay: 1.0e-5
   betas: [0.5, 0.999]
-  # stft_loss_config:
-  #   fft_size: 256
-  #   hop_size: 128
-  #   win_length: 256
-  #   scale_invariance: false
-  #   w_sc: 1.0
-  #   weight: 1.0
+  stft_loss_config:
+    fft_size: 256
+    hop_size: 128
+    win_length: 256
+    scale_invariance: false
+    w_sc: 1.0
+    weight: 5.0
   # stft_loss_config:
   #   kind: "multi"
   #   fft_sizes: [256, 512, 1024]
@@ -35,17 +35,17 @@ model_params:
   #   w_log_mag: 1.0          # RandomResolutionSTFTLoss expects these weights
   #   w_lin_mag: 0.0
   #   weight: 1.0
-  stft_loss_config:
-    kind: "mel"
-    sample_rate: 8000
-    fft_size: 256
-    hop_size: 128
-    win_length: 256
-    w_sc: 1.0
-    w_log_mag: 1.0
-    w_lin_mag: 0.0
-    w_phs: 0.0
-    n_mels: 80
+  # stft_loss_config:
+  #   kind: "mel"
+  #   sample_rate: 8000
+  #   fft_size: 256
+  #   hop_size: 128
+  #   win_length: 256
+  #   w_sc: 1.0
+  #   w_log_mag: 1.0
+  #   w_lin_mag: 0.0
+  #   w_phs: 0.0
+  #   n_mels: 80
   backbone_kwargs:
     dpt_chunk_size: 16
     dpt_hop_size: 8
@@ -62,14 +62,14 @@ trainer:
     limit_val_batches: 5
     gradient_clip_val: 0.5
     # strategy: "ddp_spawn"
-    devices: [0]
+    devices: [1]
     accelerator: "gpu"
   full:
-    max_epochs: 8
+    max_epochs: 10
     gradient_clip_val: 10.0
     accumulate_grad_batches: 8
     # strategy: "ddp"
-    devices: [0]        # list for multi-GPU
+    devices: [1]        # list for multi-GPU
     accelerator: "gpu"
   logging:
     use_wandb: true
