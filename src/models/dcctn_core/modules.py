@@ -339,6 +339,131 @@ class ComplexTransformer(nn.Module):
         out = ComplexTensor(real, imag)  # .contiguous()
         return out
 
+# adding an ad-hoc dual path transformer layer on top of our complex transformer 
+# this will capture intra and inter frame dependencies
+
+class DualPathTransformerUnit(nn.Module):
+    def __init__(self, feature_dim, nhead, layers, dropout, activation="gelu"):
+        super().__init__()
+        encoder = nn.TransformerEncoderLayer(
+            d_model=feature_dim,
+            nhead=nhead,
+            dim_feedforward=feature_dim * 4,
+            dropout=dropout,
+            activation=activation,
+            batch_first=True,
+        )
+        self.intra = nn.TransformerEncoder(copy.deepcopy(encoder), num_layers=layers)
+        self.inter = nn.TransformerEncoder(copy.deepcopy(encoder), num_layers=layers)
+        self.norm_intra = nn.LayerNorm(feature_dim)
+        self.norm_inter = nn.LayerNorm(feature_dim)
+
+    def forward(self, segments: torch.Tensor) -> torch.Tensor:
+        # segments: (batch, feature_dim, chunk_size, num_chunks)
+        b, n, k, s = segments.shape
+
+        intra_in = segments.permute(0, 3, 2, 1).reshape(b * s, k, n)
+        intra_out = self.intra(intra_in).reshape(b, s, k, n).permute(0, 3, 2, 1)
+        intra_out = self.norm_intra(intra_out.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        segments = segments + intra_out
+
+        inter_in = segments.permute(0, 2, 3, 1).reshape(b * k, s, n)
+        inter_out = self.inter(inter_in).reshape(b, k, s, n).permute(0, 3, 1, 2)
+        inter_out = self.norm_inter(inter_out.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        return segments + inter_out
+
+
+class DualPathTransformer1d(nn.Module):
+    def __init__(
+        self,
+        feature_dim,
+        chunk_size,
+        hop_size,
+        num_blocks=2,
+        nhead=4,
+        layers=2,
+        dropout=0.1,
+        activation="gelu",
+    ):
+        super().__init__()
+        self.chunk_size = chunk_size
+        self.hop_size = hop_size
+        self.blocks = nn.ModuleList(
+            DualPathTransformerUnit(feature_dim, nhead, layers, dropout, activation)
+            for _ in range(num_blocks)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (batch, feature_dim, time)
+        segments, orig_len, pad_frames = self._segment(x)
+        for block in self.blocks:
+            segments = block(segments)
+        return self._overlap_add(segments, orig_len, pad_frames)
+
+    def _segment(self, x):
+        b, n, l = x.shape
+        need_pad = max(self.chunk_size - l, 0)
+        remainder = (l - self.chunk_size) % self.hop_size if l >= self.chunk_size else 0
+        pad_frames = 0 if remainder == 0 else self.hop_size - remainder
+        total_pad = need_pad + pad_frames
+        if total_pad > 0:
+            x = torch.cat([x, x.new_zeros(b, n, total_pad)], dim=-1)
+        x = F.pad(x, (self.hop_size, self.hop_size))
+        segments = x.unfold(2, self.chunk_size, self.hop_size)  # (b, n, num_chunks, chunk_size)
+        segments = segments.permute(0, 1, 3, 2).contiguous()
+        return segments, l, pad_frames
+
+    def _overlap_add(self, segments, orig_len, pad_frames):
+        b, n, k, s = segments.shape
+        segments = segments.permute(0, 1, 3, 2).reshape(b * n, s, k)
+        out_len = orig_len + pad_frames + 2 * self.hop_size
+        output = segments.new_zeros(b * n, out_len)
+        denom = segments.new_zeros(b * n, out_len)
+        for idx in range(s):
+            start = idx * self.hop_size
+            end = start + k
+            output[:, start:end] += segments[:, idx]
+            denom[:, start:end] += 1.0
+        output = output / denom.clamp_min(1.0)
+        start = self.hop_size
+        end = start + orig_len + pad_frames
+        output = output[:, start:end]
+        if pad_frames > 0:
+            output = output[:, :-pad_frames]
+        return output.reshape(b, n, orig_len)
+
+
+class ComplexDualPathTransformer(nn.Module):
+    def __init__(
+        self,
+        feature_dim,
+        chunk_size,
+        hop_size,
+        num_blocks=2,
+        nhead=4,
+        layers=2,
+        dropout=0.1,
+        activation="gelu",
+    ):
+        super().__init__()
+        self.real_path = DualPathTransformer1d(
+            feature_dim, chunk_size, hop_size, num_blocks, nhead, layers, dropout, activation
+        )
+        self.imag_path = DualPathTransformer1d(
+            feature_dim, chunk_size, hop_size, num_blocks, nhead, layers, dropout, activation
+        )
+
+    def forward(self, x: ComplexTensor) -> ComplexTensor:
+        b, c, f, t = x.real.shape
+        real = x.real.permute(0, 2, 1, 3).reshape(b * f, c, t)
+        imag = x.imag.permute(0, 2, 1, 3).reshape(b * f, c, t)
+
+        real = self.real_path(real) + real
+        imag = self.imag_path(imag) + imag
+
+        real = real.reshape(b, f, c, t).permute(0, 2, 1, 3).contiguous()
+        imag = imag.reshape(b, f, c, t).permute(0, 2, 1, 3).contiguous()
+        return ComplexTensor(real, imag)
 
 class TransformerEncoderLayer(Module):
     r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
