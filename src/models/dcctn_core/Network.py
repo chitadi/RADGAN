@@ -187,7 +187,7 @@ class DCCTN(torch.nn.Module):
     Instead of using LSTM, it uses transformer
     """
 
-    def __init__(self, L=512, N=512, H=128, Mask=[5, 7], B=24, F_dim=257,
+    def __init__(self, L=256, N=256, H=64, Mask=[5, 7], B=24, F_dim=129,
                     dpt_chunk_size=16,
                     dpt_hop_size=8,
                     dpt_heads=4,
@@ -218,15 +218,15 @@ class DCCTN(torch.nn.Module):
         self.FTB7 = ComplexFTB(math.ceil(F_dim / 128), channels=4 * B)  # First FTB layer
         self.enc8 = ComplexEncoder(4 * B, 8 * B, kernel_size=(3, 3), stride=(2, 1), padding=(1, 1), bias=True)
         self.TB = ComplexTransformer(nhead=1, num_layer=2)  # d_model = x.shape[3]
-        self.dual_path_transformer = ComplexDualPathTransformer(
-                                        feature_dim=8 * B,
-                                        chunk_size=dpt_chunk_size,
-                                        hop_size=dpt_hop_size,
-                                        num_blocks=dpt_blocks,
-                                        nhead=dpt_heads,
-                                        layers=dpt_layers,
-                                        dropout=dpt_dropout,
-                                    )
+        # self.dual_path_transformer = ComplexDualPathTransformer(
+        #                                 feature_dim=8 * B,
+        #                                 chunk_size=dpt_chunk_size,
+        #                                 hop_size=dpt_hop_size,
+        #                                 num_blocks=dpt_blocks,
+        #                                 nhead=dpt_heads,
+        #                                 layers=dpt_layers,
+        #                                 dropout=dpt_dropout,
+        #                             )
         self.GRU = ComplexGRU(8 * B, 8 * B, num_layers=2)
 
         self.skip1 = SkipConnection(8 * B, num_convblocks=4)
@@ -250,12 +250,12 @@ class DCCTN(torch.nn.Module):
         self.dec8 = ComplexDecoder(3 * B, Mask[0] * Mask[1], kernel_size=(3, 3), stride=(2, 1), padding=(1, 1),
                                    bias=True)
         # gru for smoothening after istft
-        self.refine_gru = nn.GRU(input_size=1,
-                                 hidden_size=128,
-                                 num_layers=1,
-                                 batch_first=True,
-                                 bidirectional=True)
-        self.refine_proj = nn.Linear(256, 1)
+        # self.refine_gru = nn.GRU(input_size=1,
+        #                          hidden_size=128,
+        #                          num_layers=1,
+        #                          batch_first=True,
+        #                          bidirectional=True)
+        # self.refine_proj = nn.Linear(256, 1)
 
     def cat(self, x, y, dim):
         real = torch.cat([x.real, y.real], dim)
