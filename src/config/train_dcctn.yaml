@@ -69,7 +69,7 @@ trainer:
     gradient_clip_val: 10.0
     accumulate_grad_batches: 8
     # strategy: "ddp"
-    devices: [1]        # list for multi-GPU
+    devices: [0]        # list for multi-GPU
     accelerator: "gpu"
   logging:
     use_wandb: true
