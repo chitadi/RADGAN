@@ -85,12 +85,12 @@ class DCCTN(BaseModel):
             enhanced = enhanced.squeeze(1)
         return enhanced
 
-    def _combined_loss(self, clean: torch.Tensor, enhanced: torch.Tensor) -> torch.Tensor:
+    def _combined_loss(self, enhanced: torch.Tensor, clean: torch.Tensor) -> torch.Tensor:
         clean_for_stft = clean.unsqueeze(1) if clean.dim() == 2 else clean
         enhanced_for_stft = enhanced.unsqueeze(1) if enhanced.dim() == 2 else enhanced
         return (
-            self.si_sdr_loss(clean, enhanced)
-            + self._stft_weight * self.stft_loss(clean_for_stft, enhanced_for_stft)
+            self.si_sdr_loss(enhanced, clean)
+            + self._stft_weight * self.stft_loss(enhanced_for_stft, clean_for_stft)
         )
     
     def _log_diagnostics(self, clean, enhanced, batch, mode: str, batch_idx: int) -> None:
@@ -114,7 +114,7 @@ class DCCTN(BaseModel):
         )
         stft_logmag = F.l1_loss(torch.log(mag_enh), torch.log(mag_clean),
                                 reduction="none").mean(dim=(1, 2))
-        sisdr = -self.si_sdr_loss(clean, enhanced).detach()
+        sisdr = -self.si_sdr_loss(enhanced, clean).detach()
 
         scale = batch["scale"]
         if not isinstance(scale, torch.Tensor):
@@ -193,7 +193,7 @@ class DCCTN(BaseModel):
     
     def validation_step(self, batch, batch_idx):
         enhanced, clean, task = self.common_step(batch, batch_idx, mode="val")
-        loss = self.loss_function(clean, enhanced)
+        loss = self.loss_function(enhanced, clean)
         self.log("val/loss", loss, logger=True)
         with torch.no_grad():
             self._log_diagnostics(clean, enhanced, batch, mode="val", batch_idx=batch_idx)
