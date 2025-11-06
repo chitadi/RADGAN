@@ -317,12 +317,12 @@ class DCCTN(torch.nn.Module):
         MLTB = self.TB(enc8)
         if verbose: print('Transformer-1               : ', MLTB.shape)
         if verbose: print('\n' + '-' * 20)
-        # bottleneck = self.dual_path_transformer(MLTB)
+        bottleneck = self.dual_path_transformer(MLTB)
         if verbose: print('Dual-Path Transformer       : ', bottleneck.real.shape)
         if verbose: print('Decoder Network')
         if verbose: print('-' * 20)
-        # dec = self.dec1(self.cat(bottleneck, self.skip1(enc8), 1))
-        dec = self.dec1(self.cat(MLTB, self.skip1(enc8), 1))
+        dec = self.dec1(self.cat(bottleneck, self.skip1(enc8), 1))
+        # dec = self.dec1(self.cat(MLTB, self.skip1(enc8), 1))
         # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
         if verbose: print('Decoder-1                 : ', dec.shape)
