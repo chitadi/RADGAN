@@ -46,7 +46,7 @@ model_params:
     w_lin_mag: 0.0
     w_phs: 0.0
     n_mels: 80
-    weight: 5.0
+    weight: 25.0
   backbone_kwargs:
     dpt_chunk_size: 16
     dpt_hop_size: 8

@@ -187,7 +187,7 @@ class DCCTN(torch.nn.Module):
     Instead of using LSTM, it uses transformer
     """
 
-    def __init__(self, L=128, N=128, H=64, Mask=[5, 7], B=24, F_dim=65,
+    def __init__(self, L=512, N=512, H=128, Mask=[5, 7], B=24, F_dim=257,
                     dpt_chunk_size=16,
                     dpt_hop_size=8,
                     dpt_heads=4,
@@ -317,12 +317,12 @@ class DCCTN(torch.nn.Module):
         MLTB = self.TB(enc8)
         if verbose: print('Transformer-1               : ', MLTB.shape)
         if verbose: print('\n' + '-' * 20)
-        bottleneck = self.dual_path_transformer(MLTB)
+        # bottleneck = self.dual_path_transformer(MLTB)
         if verbose: print('Dual-Path Transformer       : ', bottleneck.real.shape)
         if verbose: print('Decoder Network')
         if verbose: print('-' * 20)
-        dec = self.dec1(self.cat(bottleneck, self.skip1(enc8), 1))
-        # dec = self.dec1(self.cat(MLTB, self.skip1(enc8), 1))
+        # dec = self.dec1(self.cat(bottleneck, self.skip1(enc8), 1))
+        dec = self.dec1(self.cat(MLTB, self.skip1(enc8), 1))
         # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
         if verbose: print('Decoder-1                 : ', dec.shape)
