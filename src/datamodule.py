@@ -19,7 +19,8 @@ from loguru import logger
 # DATASET_FOLDER = "/data/"
 DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
 class WavPairDataset(Dataset):
-    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, amp_norm="rms", percentile=95, eps=1e-8, energy_crop=True, energy_threshold=0.05):
+    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, amp_norm="rms", percentile=95, eps=1e-8, 
+                energy_crop=False, energy_threshold=0.05, random_crop=True, crop_jitter=0.5):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
         self.task = task
@@ -29,6 +30,8 @@ class WavPairDataset(Dataset):
         self.eps = eps
         self.energy_crop = energy_crop
         self.energy_threshold = energy_threshold
+        self.random_crop = random_crop
+        self.crop_jitter = crop_jitter
         assert len(self.recorded_wav_filepaths) == len(self.clean_wav_filepaths) 
         assert len(self.recorded_wav_filepaths) > 0
     
@@ -41,25 +44,35 @@ class WavPairDataset(Dataset):
             scale = torch.sqrt(torch.mean(tensor.pow(2)) + self.eps)
         return scale.clamp_min(self.eps)
         
-    def _extract_active_window(self, recorded, clean, sample_length):
-        if (not self.energy_crop) or len(recorded) <= sample_length:
+    def _extract_window(self, recorded, clean, sample_length):
+        if len(recorded) <= sample_length:
             return recorded[:sample_length], clean[:sample_length]
 
-        peak = np.max(np.abs(recorded))
-        if peak < 1e-8:
-            return recorded[:sample_length], clean[:sample_length]
-
-        active_idx = np.where(np.abs(recorded) >= self.energy_threshold * peak)[0]
-        if active_idx.size == 0:
-            start = 0
+        if self.energy_crop:
+            peak = np.max(np.abs(recorded))
+            active_idx = np.where(np.abs(recorded) >= self.energy_threshold * peak)[0]
+            if active_idx.size == 0:
+                center = len(recorded) // 2
+            else:
+                center = (active_idx[0] + active_idx[-1]) // 2
         else:
-            center = (active_idx[0] + active_idx[-1]) // 2
+            center = len(recorded) // 2
+
+        if self.random_crop:
+            max_start = len(recorded) - sample_length
+            jitter = int(self.crop_jitter * self.fs) if self.crop_jitter else sample_length // 2
+            low = max(0, center - jitter)
+            high = min(max_start, center + jitter)
+            worker_info = torch.utils.data.get_worker_info()
+            rng = np.random.default_rng() if worker_info is None else np.random.default_rng(worker_info.seed)
+            start = int(rng.integers(low, high + 1))
+        else:
             start = center - sample_length // 2
             start = max(0, min(start, len(recorded) - sample_length))
 
         end = start + sample_length
-        return recorded[start:end], clean[start:end]
-    
+        return recorded[start:end], clean[start:end]    
+
     def __getitem__(self, idx):
         
 
@@ -70,12 +83,14 @@ class WavPairDataset(Dataset):
         assert recorded_fs == clean_fs
         fs = clean_fs
 
+        if getattr(self, "fs", None) is None:
+            self.fs = fs  # cache once for helper methods that need it
 
         # temporarily cut off to align later
         recorded = recorded[:len(clean)]
 
         sample_length = self.length_sec * fs
-        recorded, clean = self._extract_active_window(recorded, clean, sample_length)
+        recorded, clean = self._extract_window(recorded, clean, sample_length)
 
         recorded_padded = np.zeros(sample_length, dtype=np.float32)
         clean_padded    = np.zeros(sample_length, dtype=np.float32)
@@ -96,9 +111,9 @@ class WavPairDataset(Dataset):
         clean_tensor = torch.from_numpy(clean_padded)
 
         # can change this to 1e-10 as well
-        # scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
-        # scale = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
-        scale = self._compute_scale(recorded_tensor)
+        scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
+        scale = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
+        # scale = self._compute_scale(recorded_tensor)
 
         recorded_tensor = recorded_tensor / scale
         clean_tensor = clean_tensor / scale
