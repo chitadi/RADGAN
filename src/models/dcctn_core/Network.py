@@ -187,7 +187,7 @@ class DCCTN(torch.nn.Module):
     Instead of using LSTM, it uses transformer
     """
 
-    def __init__(self, L=256, N=256, H=128, Mask=[5, 7], B=24, F_dim=129,
+    def __init__(self, L=128, N=128, H=64, Mask=[5, 7], B=24, F_dim=65,
                     dpt_chunk_size=16,
                     dpt_hop_size=8,
                     dpt_heads=4,
@@ -239,8 +239,9 @@ class DCCTN(torch.nn.Module):
         self.skip8 = SkipConnection(1 * B, num_convblocks=1)
 
         self.dec1 = ComplexDecoder(16 * B, 8 * B, kernel_size=(3, 3), stride=(2, 1), padding=(1, 1), bias=True,
+                                   output_padding=(0, 0))
+        self.dec2 = ComplexDecoder(12 * B, 8 * B, kernel_size=(3, 3), stride=(2, 1), padding=(1, 1), bias=True,
                                    output_padding=(1, 0))
-        self.dec2 = ComplexDecoder(12 * B, 8 * B, kernel_size=(3, 3), stride=(2, 1), padding=(1, 1), bias=True)
         self.dec3 = ComplexDecoder(12 * B, 4 * B, kernel_size=(3, 3), stride=(2, 1), padding=(1, 1), bias=True)
         self.dec4 = ComplexDecoder(7 * B, 3 * B, kernel_size=(3, 3), stride=(2, 1), padding=(1, 1), bias=True)
         self.dec5 = ComplexDecoder(6 * B, 3 * B, kernel_size=(3, 3), stride=(2, 1), padding=(1, 1), bias=True)

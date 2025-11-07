@@ -4,6 +4,7 @@ if __name__ == "__main__":
 else:
     from .base_model import BaseModel
 
+import math
 import torch
 import torch.nn.functional as F
 from auraloss.time import SISDRLoss
@@ -116,6 +117,19 @@ class DCCTN(BaseModel):
                                 reduction="none").mean(dim=(1, 2))
         sisdr = -self.si_sdr_loss(enhanced, clean).detach()
 
+        clean_flat = clean.reshape(clean.size(0), -1)
+        enh_flat = enhanced.reshape_as(clean_flat)
+        diff_flat = enh_flat - clean_flat
+        signal_pow = clean_flat.pow(2).mean(dim=1)
+        noise_pow = diff_flat.pow(2).mean(dim=1)
+        snr = 10.0 * torch.log10(signal_pow.clamp_min(self._diag_eps) /
+                                 noise_pow.clamp_min(self._diag_eps))
+        sdsdr_num = clean_flat.pow(2).sum(dim=1)
+        sdsdr_den = diff_flat.pow(2).sum(dim=1)
+        sdsdr = 10.0 * torch.log10(sdsdr_num.clamp_min(self._diag_eps) /
+                                   sdsdr_den.clamp_min(self._diag_eps))
+        logcosh = (F.softplus(2.0 * diff_flat) - diff_flat - math.log(2.0)).mean(dim=1)
+
         scale = batch["scale"]
         if not isinstance(scale, torch.Tensor):
             scale = torch.tensor(scale, device=clean.device, dtype=clean.dtype)
@@ -135,6 +149,9 @@ class DCCTN(BaseModel):
         self.log(f"{mode}/stft_sc", stft_sc.mean(), batch_size=batch_sz)
         self.log(f"{mode}/stft_logmag", stft_logmag.mean(), batch_size=batch_sz)
         self.log(f"{mode}/mfcc_cos", mfcc_cos.mean(), batch_size=batch_sz)
+        self.log(f"{mode}/snr", snr.mean(), batch_size=batch_sz)
+        self.log(f"{mode}/sdsdr", sdsdr.mean(), batch_size=batch_sz)
+        self.log(f"{mode}/logcosh", logcosh.mean(), batch_size=batch_sz)
 
         fs = batch.get("fs", 8000.0)
         if isinstance(fs, torch.Tensor):
