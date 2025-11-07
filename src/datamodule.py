@@ -79,6 +79,9 @@ class WavPairDataset(Dataset):
         recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
         clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
 
+        recorded = recorded.squeeze(0).to(torch.float32)
+        clean    = clean.squeeze(0).to(torch.float32)
+
         assert recorded_fs == clean_fs
         fs = clean_fs
 
