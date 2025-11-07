@@ -19,7 +19,7 @@ from loguru import logger
 # DATASET_FOLDER = "/data/"
 DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
 class WavPairDataset(Dataset):
-    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, amp_norm="rms", percentile=95, eps=1e-8):
+    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, amp_norm="rms", percentile=95, eps=1e-8, energy_crop=True, energy_threshold=0.05):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
         self.task = task
