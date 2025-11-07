@@ -15,6 +15,7 @@ import torchaudio
 from utils import safe_open_yaml
 import math
 from loguru import logger
+import torchaudio
 
 # DATASET_FOLDER = "/data/"
 DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
@@ -72,10 +73,11 @@ class WavPairDataset(Dataset):
 
     def __getitem__(self, idx):
         
-
-        recorded, recorded_fs = sf.read(self.recorded_wav_filepaths[idx], dtype=np.float32)
-        clean, clean_fs       = sf.read(self.clean_wav_filepaths[idx], dtype=np.float32)
-
+        
+        # recorded, recorded_fs = sf.read(self.recorded_wav_filepaths[idx], dtype=np.float32)
+        # clean, clean_fs       = sf.read(self.clean_wav_filepaths[idx], dtype=np.float32)
+        recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
+        clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
 
         assert recorded_fs == clean_fs
         fs = clean_fs
@@ -108,9 +110,12 @@ class WavPairDataset(Dataset):
         clean_tensor = torch.from_numpy(clean_padded)
 
         # can change this to 1e-10 as well
-        # scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
-        scale = torch.tensor(1.0, dtype=recorded_tensor.dtype)
+        scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
+        scale = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
         # scale = self._compute_scale(recorded_tensor)
+
+        recorded_tensor = recorded_tensor / scale
+        clean_tensor    = clean_tensor / scale
 
         return {
             "recorded": recorded_tensor,
