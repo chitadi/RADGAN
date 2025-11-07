@@ -27,6 +27,8 @@ class WavPairDataset(Dataset):
         self.amp_norm = amp_norm
         self.percentile = percentile
         self.eps = eps
+        self.energy_crop = energy_crop
+        self.energy_threshold = energy_threshold
         assert len(self.recorded_wav_filepaths) == len(self.clean_wav_filepaths) 
         assert len(self.recorded_wav_filepaths) > 0
     
@@ -38,6 +40,25 @@ class WavPairDataset(Dataset):
         else:  # default RMS
             scale = torch.sqrt(torch.mean(tensor.pow(2)) + self.eps)
         return scale.clamp_min(self.eps)
+        
+    def _extract_active_window(self, recorded, clean, sample_length):
+        if (not self.energy_crop) or len(recorded) <= sample_length:
+            return recorded[:sample_length], clean[:sample_length]
+
+        peak = np.max(np.abs(recorded))
+        if peak < 1e-8:
+            return recorded[:sample_length], clean[:sample_length]
+
+        active_idx = np.where(np.abs(recorded) >= self.energy_threshold * peak)[0]
+        if active_idx.size == 0:
+            start = 0
+        else:
+            center = (active_idx[0] + active_idx[-1]) // 2
+            start = center - sample_length // 2
+            start = max(0, min(start, len(recorded) - sample_length))
+
+        end = start + sample_length
+        return recorded[start:end], clean[start:end]
     
     def __getitem__(self, idx):
         
@@ -54,6 +75,7 @@ class WavPairDataset(Dataset):
         recorded = recorded[:len(clean)]
 
         sample_length = self.length_sec * fs
+        recorded, clean = self._extract_active_window(recorded, clean, sample_length)
 
         recorded_padded = np.zeros(sample_length, dtype=np.float32)
         clean_padded    = np.zeros(sample_length, dtype=np.float32)
