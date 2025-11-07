@@ -48,30 +48,27 @@ class WavPairDataset(Dataset):
         if len(recorded) <= sample_length:
             return recorded[:sample_length], clean[:sample_length]
 
-        if self.energy_crop:
-            peak = np.max(np.abs(recorded))
-            active_idx = np.where(np.abs(recorded) >= self.energy_threshold * peak)[0]
-            if active_idx.size == 0:
-                center = len(recorded) // 2
-            else:
-                center = (active_idx[0] + active_idx[-1]) // 2
-        else:
-            center = len(recorded) // 2
+        center = self._active_center(recorded) if self.energy_crop else len(recorded) // 2
 
         if self.random_crop:
-            max_start = len(recorded) - sample_length
+            max_start = max(len(recorded) - sample_length, 0)
             jitter = int(self.crop_jitter * self.fs) if self.crop_jitter else sample_length // 2
-            low = max(0, center - jitter)
-            high = min(max_start, center + jitter)
-            worker_info = torch.utils.data.get_worker_info()
-            rng = np.random.default_rng() if worker_info is None else np.random.default_rng(worker_info.seed)
-            start = int(rng.integers(low, high + 1))
+            jitter = max(1, jitter)
+
+            low = max(0, min(max_start, center - jitter))
+            high = max(low, min(max_start, center + jitter))
+
+            if high == low:
+                start = low
+            else:
+                worker_info = torch.utils.data.get_worker_info()
+                rng = np.random.default_rng() if worker_info is None else np.random.default_rng(worker_info.seed)
+                start = int(rng.integers(low, high + 1))
         else:
-            start = center - sample_length // 2
-            start = max(0, min(start, len(recorded) - sample_length))
+            start = max(0, min(center - sample_length // 2, len(recorded) - sample_length))
 
         end = start + sample_length
-        return recorded[start:end], clean[start:end]    
+        return recorded[start:end], clean[start:end]
 
     def __getitem__(self, idx):
         
