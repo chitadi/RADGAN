@@ -19,13 +19,26 @@ from loguru import logger
 # DATASET_FOLDER = "/data/"
 DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
 class WavPairDataset(Dataset):
-    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec):
+    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, amp_norm="rms", percentile=95, eps=1e-8):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
         self.task = task
         self.length_sec = length_sec
+        self.amp_norm = amp_norm
+        self.percentile = percentile
+        self.eps = eps
         assert len(self.recorded_wav_filepaths) == len(self.clean_wav_filepaths) 
         assert len(self.recorded_wav_filepaths) > 0
+    
+    def _compute_scale(self, tensor: torch.Tensor) -> torch.Tensor:
+        flat = tensor.abs().flatten()
+        if self.amp_norm == "percentile":
+            k = max(1, int(math.ceil(len(flat) * self.percentile / 100.0)))
+            scale = flat.kthvalue(k).values
+        else:  # default RMS
+            scale = torch.sqrt(torch.mean(tensor.pow(2)) + self.eps)
+        return scale.clamp_min(self.eps)
+    
     def __getitem__(self, idx):
         
 
@@ -61,8 +74,9 @@ class WavPairDataset(Dataset):
         clean_tensor = torch.from_numpy(clean_padded)
 
         # can change this to 1e-10 as well
-        scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
-        scale = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
+        # scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
+        # scale = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
+        scale = self._compute_scale(recorded_tensor)
 
         recorded_tensor = recorded_tensor / scale
         clean_tensor = clean_tensor / scale
