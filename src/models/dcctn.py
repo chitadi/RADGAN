@@ -135,8 +135,8 @@ class DCCTN(BaseModel):
             scale_clean = torch.tensor(scale_clean, device=clean.device, dtype=clean.dtype)
         else:
             scale_clean = scale_clean.to(clean.device, clean.dtype)
-        clean_dn = clean * scale.unsqueeze(-1)
-        enh_dn = enhanced * scale.unsqueeze(-1)
+        clean_dn = clean * scale_clean.unsqueeze(-1)
+        enh_dn = enhanced * scale_clean.unsqueeze(-1)
         mfcc_cos = torch.tensor(
             [self.csmfcc_fn(c.cpu().numpy(), e.cpu().numpy())
              for c, e in zip(clean_dn.detach(), enh_dn.detach())],
@@ -218,12 +218,12 @@ class DCCTN(BaseModel):
             self.val_outputs.append(enhanced.detach().cpu().numpy())
             self.val_targets.append(clean.detach().cpu().numpy())
             self.val_tasks.append(task)
-            scale = batch["scale"]
-            if isinstance(scale, torch.Tensor):
-                scale = scale.detach().cpu().numpy()
+            scale_clean = batch["scale_clean"]
+            if isinstance(scale_clean, torch.Tensor):
+                scale_clean = scale_clean.detach().cpu().numpy()
             else:
-                scale = np.asarray(scale)
-            self.val_scales.append(scale)
+                scale_clean = np.asarray(scale_clean)
+            self.val_clean_scales.append(scale_clean)
         return loss
 
     def configure_optimizers(self):
