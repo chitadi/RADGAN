@@ -75,8 +75,9 @@ class BaseModel(pl.LightningModule):
         loss = self.loss_function(enhanced, clean)
         scale_recorded = batch["scale_recorded"]
         scale_clean = batch["scale_clean"]
-        if not isinstance(scale, torch.Tensor):
+        if not isinstance(scale_recorded, torch.Tensor):
             scale_recorded = torch.as_tensor(scale_recorded, device=self.device, dtype=torch.float32)
+        if not isinstance(scale_clean, torch.Tensor):
             scale_clean = torch.as_tensor(scale_clean, device=self.device, dtype=torch.float32)
         self.log(f'train/loss', loss, on_step=True, on_epoch=True, prog_bar=False, logger=True)
         # self.log("train/scale_mean", scale.mean(), prog_bar=False, on_step=True)
