@@ -130,11 +130,11 @@ class DCCTN(BaseModel):
                                    sdsdr_den.clamp_min(self._diag_eps))
         logcosh = (F.softplus(2.0 * diff_flat) - diff_flat - math.log(2.0)).mean(dim=1)
 
-        scale = batch["scale"]
-        if not isinstance(scale, torch.Tensor):
-            scale = torch.tensor(scale, device=clean.device, dtype=clean.dtype)
+        scale_clean = batch["scale_clean"]
+        if not isinstance(scale_clean, torch.Tensor):
+            scale_clean = torch.tensor(scale_clean, device=clean.device, dtype=clean.dtype)
         else:
-            scale = scale.to(clean.device, clean.dtype)
+            scale_clean = scale_clean.to(clean.device, clean.dtype)
         clean_dn = clean * scale.unsqueeze(-1)
         enh_dn = enhanced * scale.unsqueeze(-1)
         mfcc_cos = torch.tensor(
