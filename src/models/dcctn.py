@@ -58,9 +58,9 @@ class DCCTN(BaseModel):
 
         
         self._diag_cfg = {
-          "fft_size": stft_cfg.get("fft_size", 128),
-          "hop_size": stft_cfg.get("hop_size", 64),
-          "win_length": stft_cfg.get("win_length", stft_cfg.get("fft_size", 128)),
+          "fft_size": stft_cfg.get("fft_size", 256),
+          "hop_size": stft_cfg.get("hop_size", 128),
+          "win_length": stft_cfg.get("win_length", stft_cfg.get("fft_size", 256)),
         }
         self.register_buffer(
             "diag_window",
