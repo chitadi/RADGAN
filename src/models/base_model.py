@@ -113,7 +113,7 @@ class BaseModel(pl.LightningModule):
         refs_denorm, degs_denorm = [], []
         flat_tasks = []
         for batch_out, batch_ref, batch_task, batch_scale in zip(outputs, targets, tasks, clean_scales):
-            batch_scale_clean = np.asarray(batch_scale_clean).astype(np.float64).reshape(-1)
+            batch_scale_clean = np.asarray(batch_scale).astype(np.float64).reshape(-1)
             denorm_refs, denorm_degs = [], []
             for out, ref, scale in zip(batch_out, batch_ref, batch_scale_clean):
                 scale = float(scale)
