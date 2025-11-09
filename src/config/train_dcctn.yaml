@@ -1,6 +1,6 @@
 datamodule:
   length_sec: 4
-  batch_size: 14
+  batch_size: 16
 
 model: "dcctn"        # new LightningModule wrapping Network.DCCTN
 model_params:
