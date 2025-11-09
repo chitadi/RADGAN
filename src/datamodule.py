@@ -15,14 +15,13 @@ import torchaudio
 from utils import safe_open_yaml
 import math
 from loguru import logger
-import torchaudio
 from oracle_wiener import oracle_wiener, load_waveform
 
 # DATASET_FOLDER = "/data/"
 DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
 class WavPairDataset(Dataset):
-    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, amp_norm="rms", percentile=95, eps=1e-8, 
-                energy_crop=False, energy_threshold=0.05, random_crop=True, crop_jitter=0.5):
+    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, amp_norm="rms", percentile=95, eps=1e-8,
+                 energy_crop=False, energy_threshold=0.05, random_crop=True, crop_jitter=0.5):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
         self.task = task
@@ -59,7 +58,7 @@ class WavPairDataset(Dataset):
             return 0
         center = int((idx[0] + idx[-1]).item() // 2)
         return center
-        
+    
     def _extract_window(self, recorded, clean, sample_length):
         if len(recorded) <= sample_length:
             return recorded[:sample_length], clean[:sample_length]
@@ -85,20 +84,21 @@ class WavPairDataset(Dataset):
 
         end = start + sample_length
         return recorded[start:end], clean[start:end]
-
+    
     def __getitem__(self, idx):
         
-        
+
         # recorded, recorded_fs = sf.read(self.recorded_wav_filepaths[idx], dtype=np.float32)
         # clean, clean_fs       = sf.read(self.clean_wav_filepaths[idx], dtype=np.float32)
         clean, clean_fs = load_waveform(self.clean_wav_filepaths[idx])
         recorded, recorded_fs = load_waveform(self.recorded_wav_filepaths[idx])
-
+        
         # recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
         # clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
 
         recorded = recorded.squeeze(-1).to(torch.float32)
         clean    = clean.squeeze(-1).to(torch.float32)
+
 
         assert recorded_fs == clean_fs
         fs = clean_fs
@@ -126,7 +126,6 @@ class WavPairDataset(Dataset):
         else:
             clean_padded[:len(clean)] = clean
 
-
         # converting to a tensor for new pipeline
         recorded_tensor = torch.from_numpy(recorded_padded)
         clean_tensor = torch.from_numpy(clean_padded)
@@ -135,16 +134,16 @@ class WavPairDataset(Dataset):
         scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
         scale_recorded = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
         # scale_clean = torch.tensor(max(clean_tensor.abs().max().item(), 1e-8), dtype=clean_tensor.dtype)
-        # scale = self._compute_scale(recorded_tensor)
+        # scale = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
         scale_clean = scale_recorded
-
+        
         recorded_tensor = recorded_tensor / scale_recorded
-        clean_tensor    = clean_tensor / scale_recorded
-
+        clean_tensor = clean_tensor / scale_recorded
+        
         recorded_tensor = recorded_tensor.unsqueeze(1)  # (T,) -> (T, 1)
         clean_tensor    = clean_tensor.unsqueeze(1)     # (T,) -> (T, 1)
 
-        recorded_tensor = oracle_wiener(recorded_tensor, clean_tensor, fs)
+        # recorded_tensor = oracle_wiener(recorded_tensor, clean_tensor, fs)
 
         recorded_tensor = recorded_tensor.squeeze(1)  # (T, 1) -> (T,)
         clean_tensor    = clean_tensor.squeeze(1)     # (T, 1) -> (T,)
@@ -196,7 +195,7 @@ class DataModule(pl.LightningDataModule):
     def load_train_dev(self):
         
         assert os.path.exists(DATASET_FOLDER)
-
+        
         # start fresh every setup call so append() always works
         self.dataset = {"train": [], "val": [], "test": []}
 
@@ -250,7 +249,7 @@ class DataModule(pl.LightningDataModule):
                     random_crop=(mode == "train"),
                     energy_crop=(mode != "train"),)
                 )
-
+                
         # after all tasks/modes have been loaded
         for mode in ("train", "val"):
             datasets = self.dataset[mode]
@@ -260,6 +259,7 @@ class DataModule(pl.LightningDataModule):
                 self.dataset[mode] = datasets[0]
             else:
                 self.dataset[mode] = ConcatDataset(datasets)
+
 
                 # if mode == "train":
                 #     self.dataset["train"] 
