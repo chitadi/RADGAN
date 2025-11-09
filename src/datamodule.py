@@ -16,6 +16,7 @@ from utils import safe_open_yaml
 import math
 from loguru import logger
 import torchaudio
+from oracle_wiener import oracle_wiener, load_waveform
 
 # DATASET_FOLDER = "/data/"
 DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
@@ -44,6 +45,20 @@ class WavPairDataset(Dataset):
         else:  # default RMS
             scale = torch.sqrt(torch.mean(tensor.pow(2)) + self.eps)
         return scale.clamp_min(self.eps)
+    
+    def _active_center(self, x: torch.Tensor) -> int:
+        # Find the midpoint of the “active” region above a fraction of the peak
+        if x.numel() == 0:
+            return 0
+        peak = float(x.abs().max())
+        if not np.isfinite(peak) or peak < self.eps:
+            return 0
+        thr = self.energy_threshold * peak
+        idx = (x.abs() >= thr).nonzero(as_tuple=False).squeeze(-1)
+        if idx.numel() == 0:
+            return 0
+        center = int((idx[0] + idx[-1]).item() // 2)
+        return center
         
     def _extract_window(self, recorded, clean, sample_length):
         if len(recorded) <= sample_length:
@@ -76,11 +91,14 @@ class WavPairDataset(Dataset):
         
         # recorded, recorded_fs = sf.read(self.recorded_wav_filepaths[idx], dtype=np.float32)
         # clean, clean_fs       = sf.read(self.clean_wav_filepaths[idx], dtype=np.float32)
-        recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
-        clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
+        clean, clean_fs = load_waveform(self.clean_wav_filepaths[idx])
+        recorded, recorded_fs = load_waveform(self.recorded_wav_filepaths[idx])
 
-        recorded = recorded.squeeze(0).to(torch.float32)
-        clean    = clean.squeeze(0).to(torch.float32)
+        # recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
+        # clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
+
+        recorded = recorded.squeeze(-1).to(torch.float32)
+        clean    = clean.squeeze(-1).to(torch.float32)
 
         assert recorded_fs == clean_fs
         fs = clean_fs
@@ -108,6 +126,7 @@ class WavPairDataset(Dataset):
         else:
             clean_padded[:len(clean)] = clean
 
+
         # converting to a tensor for new pipeline
         recorded_tensor = torch.from_numpy(recorded_padded)
         clean_tensor = torch.from_numpy(clean_padded)
@@ -115,11 +134,20 @@ class WavPairDataset(Dataset):
         # can change this to 1e-10 as well
         scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
         scale_recorded = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
-        scale_clean = torch.tensor(max(clean_tensor.abs().max().item(), 1e-8), dtype=clean_tensor.dtype)
+        # scale_clean = torch.tensor(max(clean_tensor.abs().max().item(), 1e-8), dtype=clean_tensor.dtype)
         # scale = self._compute_scale(recorded_tensor)
+        scale_clean = scale_recorded
 
         recorded_tensor = recorded_tensor / scale_recorded
         clean_tensor    = clean_tensor / scale_clean
+
+        recorded_tensor = recorded_tensor.unsqueeze(1)  # (T,) -> (T, 1)
+        clean_tensor    = clean_tensor.unsqueeze(1)     # (T,) -> (T, 1)
+
+        recorded_tensor = oracle_wiener(recorded_tensor, clean_tensor, fs)
+
+        recorded_tensor = recorded_tensor.squeeze(1)  # (T, 1) -> (T,)
+        clean_tensor    = clean_tensor.squeeze(1)     # (T, 1) -> (T,)
 
         return {
             "recorded": recorded_tensor,
@@ -169,6 +197,9 @@ class DataModule(pl.LightningDataModule):
         
         assert os.path.exists(DATASET_FOLDER)
 
+        # start fresh every setup call so append() always works
+        self.dataset = {"train": [], "val": [], "test": []}
+        
         # sorting everything for reproducable results
         task_folders = sorted(os.listdir(DATASET_FOLDER))
         logger.info(f"The available tasks are {task_folders}")
@@ -206,10 +237,29 @@ class DataModule(pl.LightningDataModule):
                 
                 logger.info(f"{mode}: {len(recorded_wav_filepaths)} wav files.")
                 
-                self.dataset[mode] += WavPairDataset(recorded_wav_filepaths, 
+                # self.dataset[mode] += WavPairDataset(recorded_wav_filepaths, 
+                #     clean_wav_filepaths, 
+                #     task=task, 
+                #     length_sec=self.length_sec)
+                
+                self.dataset[mode].append(
+                    WavPairDataset(recorded_wav_filepaths, 
                     clean_wav_filepaths, 
                     task=task, 
-                    length_sec=self.length_sec)
+                    length_sec=self.length_sec,
+                    random_crop=(mode == "train"),
+                    energy_crop=(mode != "train"),)
+                )
+
+        # after all tasks/modes have been loaded
+        for mode in ("train", "val", "test"):
+            datasets = self.dataset[mode]
+            if len(datasets) == 0:
+                raise RuntimeError(f"No {mode} data found.")
+            if len(datasets) == 1:
+                self.dataset[mode] = datasets[0]
+            else:
+                self.dataset[mode] = ConcatDataset(datasets)
 
                 # if mode == "train":
                 #     self.dataset["train"] 
