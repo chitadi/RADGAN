@@ -199,7 +199,7 @@ class DataModule(pl.LightningDataModule):
 
         # start fresh every setup call so append() always works
         self.dataset = {"train": [], "val": [], "test": []}
-        
+
         # sorting everything for reproducable results
         task_folders = sorted(os.listdir(DATASET_FOLDER))
         logger.info(f"The available tasks are {task_folders}")
@@ -252,7 +252,7 @@ class DataModule(pl.LightningDataModule):
                 )
 
         # after all tasks/modes have been loaded
-        for mode in ("train", "val", "test"):
+        for mode in ("train", "val"):
             datasets = self.dataset[mode]
             if len(datasets) == 0:
                 raise RuntimeError(f"No {mode} data found.")
