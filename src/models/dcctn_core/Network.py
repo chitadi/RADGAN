@@ -217,16 +217,16 @@ class DCCTN(torch.nn.Module):
         self.enc7 = ComplexEncoder(4 * B, 4 * B, kernel_size=(3, 3), stride=(2, 1), padding=(1, 1), bias=True)
         self.FTB7 = ComplexFTB(math.ceil(F_dim / 128), channels=4 * B)  # First FTB layer
         self.enc8 = ComplexEncoder(4 * B, 8 * B, kernel_size=(3, 3), stride=(2, 1), padding=(1, 1), bias=True)
-        self.TB = ComplexTransformer(nhead=1, num_layer=2)  # d_model = x.shape[3]
-        # self.dual_path_transformer = ComplexDualPathTransformer(
-        #                                 feature_dim=8 * B,
-        #                                 chunk_size=dpt_chunk_size,
-        #                                 hop_size=dpt_hop_size,
-        #                                 num_blocks=dpt_blocks,
-        #                                 nhead=dpt_heads,
-        #                                 layers=dpt_layers,
-        #                                 dropout=dpt_dropout,
-        #                             )
+        # self.TB = ComplexTransformer(nhead=1, num_layer=2)  # d_model = x.shape[3]
+        self.dual_path_transformer = ComplexDualPathTransformer(
+                                        feature_dim=8 * B,
+                                        chunk_size=dpt_chunk_size,
+                                        hop_size=dpt_hop_size,
+                                        num_blocks=dpt_blocks,
+                                        nhead=dpt_heads,
+                                        layers=dpt_layers,
+                                        dropout=dpt_dropout,
+                                    )
         self.GRU = ComplexGRU(8 * B, 8 * B, num_layers=2)
 
         self.skip1 = SkipConnection(8 * B, num_convblocks=4)
@@ -314,15 +314,16 @@ class DCCTN(torch.nn.Module):
 
         # +++++++++++++++++++ Expanding Path  +++++++++++++++++++++ #
 
-        MLTB = self.TB(enc8)
-        if verbose: print('Transformer-1               : ', MLTB.shape)
-        if verbose: print('\n' + '-' * 20)
+        # MLTB = self.TB(enc8)
+        # if verbose: print('Transformer-1               : ', MLTB.shape)
+        # if verbose: print('\n' + '-' * 20)
         # bottleneck = self.dual_path_transformer(MLTB)
+        bottleneck = self.dual_path_transformer(enc8)
         if verbose: print('Dual-Path Transformer       : ', bottleneck.real.shape)
         if verbose: print('Decoder Network')
         if verbose: print('-' * 20)
-        # dec = self.dec1(self.cat(bottleneck, self.skip1(enc8), 1))
-        dec = self.dec1(self.cat(MLTB, self.skip1(enc8), 1))
+        dec = self.dec1(self.cat(bottleneck, self.skip1(enc8), 1))
+        # dec = self.dec1(self.cat(MLTB, self.skip1(enc8), 1))
         # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
         if verbose: print('Decoder-1                 : ', dec.shape)
