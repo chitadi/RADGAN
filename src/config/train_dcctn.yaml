@@ -15,26 +15,26 @@ model_params:
   #   scale_invariance: false
   #   w_sc: 1.0
   #   weight: 20.0
-  stft_loss_config:
-    kind: "multi"
-    fft_sizes: [128, 256, 512]
-    hop_sizes: [64, 128, 256]
-    win_lengths: [128, 256, 512]
-    w_log_mag: 1.0
-    w_sc: 1.0 
-    weight: 25.0
-  # for random-resolution STFT
   # stft_loss_config:
-  #   kind: "random"
-  #   resolutions: 3          # matches the `resolutions` arg
-  #   min_fft_size: 256
-  #   max_fft_size: 1024      # keep this ≤32 000 for 4 s @ 8 kHz
-  #   min_hop_size: 0.25      # proportion of window; tweak as needed
-  #   max_hop_size: 0.5
-  #   w_sc: 1.0
-  #   w_log_mag: 1.0          # RandomResolutionSTFTLoss expects these weights
-  #   w_lin_mag: 0.0
+  #   kind: "multi"
+  #   fft_sizes: [128, 256, 512]
+  #   hop_sizes: [64, 128, 256]
+  #   win_lengths: [128, 256, 512]
+  #   w_log_mag: 1.0
+  #   w_sc: 1.0 
   #   weight: 25.0
+  # for random-resolution STFT
+  stft_loss_config:
+    kind: "random"
+    resolutions: 3          # matches the `resolutions` arg
+    min_fft_size: 128
+    max_fft_size: 512      # keep this ≤32 000 for 4 s @ 8 kHz
+    min_hop_size: 0.25      # proportion of window; tweak as needed
+    max_hop_size: 0.5
+    w_sc: 1.0
+    w_log_mag: 1.0          # RandomResolutionSTFTLoss expects these weights
+    w_lin_mag: 0.0
+    weight: 25.0
   # stft_loss_config:
   #   kind: "mel"
   #   sample_rate: 8000
