@@ -252,12 +252,12 @@ class DCCTN(torch.nn.Module):
         self.dec8 = ComplexDecoder(3 * B, Mask[0] * Mask[1], kernel_size=(3, 3), stride=(2, 1), padding=(1, 1),
                                    bias=True)
         # gru for smoothening after istft
-        # self.refine_gru = nn.GRU(input_size=1,
-        #                          hidden_size=128,
-        #                          num_layers=1,
-        #                          batch_first=True,
-        #                          bidirectional=True)
-        # self.refine_proj = nn.Linear(256, 1)
+        self.refine_gru = nn.GRU(input_size=1,
+                                 hidden_size=128,
+                                 num_layers=1,
+                                 batch_first=True,
+                                 bidirectional=True)
+        self.refine_proj = nn.Linear(256, 1)
 
     def cat(self, x, y, dim):
         real = torch.cat([x.real, y.real], dim)
@@ -350,9 +350,9 @@ class DCCTN(torch.nn.Module):
         audio_enh = self.istft(enh_mag, enh_phase, squeeze=True)
         
         #adding GRU smoothening after istft
-        # seq = audio_enh.unsqueeze(-1)               # (B, T, 1)
-        # gru_out, _ = self.refine_gru(seq)
-        # audio_enh = self.refine_proj(gru_out).squeeze(-1)
+        seq = audio_enh.unsqueeze(-1)               # (B, T, 1)
+        gru_out, _ = self.refine_gru(seq)
+        audio_enh = self.refine_proj(gru_out).squeeze(-1)
         if verbose: print('*' * 60)
         if verbose: print('Output Audio Shape        : ', audio_enh.shape)
         if verbose: print('*' * 60)
