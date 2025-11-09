@@ -139,7 +139,7 @@ class WavPairDataset(Dataset):
         scale_clean = scale_recorded
 
         recorded_tensor = recorded_tensor / scale_recorded
-        clean_tensor    = clean_tensor / scale_clean
+        clean_tensor    = clean_tensor / scale_recorded
 
         recorded_tensor = recorded_tensor.unsqueeze(1)  # (T,) -> (T, 1)
         clean_tensor    = clean_tensor.unsqueeze(1)     # (T,) -> (T, 1)
@@ -153,7 +153,7 @@ class WavPairDataset(Dataset):
             "recorded": recorded_tensor,
             "clean": clean_tensor,
             "scale_recorded": scale_recorded,
-            "scale_clean": scale_clean,
+            "scale_clean": scale_recorded,
             "fs": fs,
             "task": self.task,
         }

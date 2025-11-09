@@ -4,25 +4,25 @@ datamodule:
 
 model: "dcctn"        # new LightningModule wrapping Network.DCCTN
 model_params:
-  learning_rate: 3.0e-5
+  learning_rate: 1.0e-4
   # change this back
   weight_decay: 1.0e-5
   betas: [0.5, 0.999]
-  stft_loss_config:
-    fft_size: 256
-    hop_size: 128
-    win_length: 256
-    scale_invariance: false
-    w_sc: 1.0
-    weight: 50.0
   # stft_loss_config:
-  #   kind: "multi"
-  #   fft_sizes: [256, 512, 1024]
-  #   hop_sizes: [50, 64, 75]
-  #   win_lengths: [200, 256, 300]
-  #   w_log_mag: 1.0
-  #   w_sc: 1.0 
-  #   weight: 1.0
+  #   fft_size: 256
+  #   hop_size: 128
+  #   win_length: 256
+  #   scale_invariance: false
+  #   w_sc: 1.0
+  #   weight: 20.0
+  stft_loss_config:
+    kind: "multi"
+    fft_sizes: [256, 512, 1024]
+    hop_sizes: [50, 64, 75]
+    win_lengths: [200, 256, 300]
+    w_log_mag: 1.0
+    w_sc: 1.0 
+    weight: 25.0
   # for random-resolution STFT
   # stft_loss_config:
   #   kind: "random"
