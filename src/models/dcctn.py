@@ -211,7 +211,7 @@ class DCCTN(BaseModel):
     def validation_step(self, batch, batch_idx):
         enhanced, clean, task = self.common_step(batch, batch_idx, mode="val")
         loss = self.loss_function(enhanced, clean)
-        self.log("val/loss", loss, logger=True)
+        self.log("val/loss", loss, on_epoch=True, on_step=False, logger=True)
         with torch.no_grad():
             self._log_diagnostics(clean, enhanced, batch, mode="val", batch_idx=batch_idx)
         if self.heavy_eval:
