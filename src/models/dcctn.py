@@ -4,6 +4,7 @@ if __name__ == "__main__":
 else:
     from .base_model import BaseModel
 
+import math
 import torch
 import torch.nn.functional as F
 from auraloss.time import SISDRLoss
@@ -57,9 +58,9 @@ class DCCTN(BaseModel):
 
         
         self._diag_cfg = {
-          "fft_size": stft_cfg.get("fft_size", 128),
-          "hop_size": stft_cfg.get("hop_size", 64),
-          "win_length": stft_cfg.get("win_length", stft_cfg.get("fft_size", 128)),
+          "fft_size": stft_cfg.get("fft_size", 256),
+          "hop_size": stft_cfg.get("hop_size", 128),
+          "win_length": stft_cfg.get("win_length", stft_cfg.get("fft_size", 256)),
         }
         self.register_buffer(
             "diag_window",
@@ -85,12 +86,12 @@ class DCCTN(BaseModel):
             enhanced = enhanced.squeeze(1)
         return enhanced
 
-    def _combined_loss(self, clean: torch.Tensor, enhanced: torch.Tensor) -> torch.Tensor:
+    def _combined_loss(self, enhanced: torch.Tensor, clean: torch.Tensor) -> torch.Tensor:
         clean_for_stft = clean.unsqueeze(1) if clean.dim() == 2 else clean
         enhanced_for_stft = enhanced.unsqueeze(1) if enhanced.dim() == 2 else enhanced
         return (
-            self.si_sdr_loss(clean, enhanced)
-            + self._stft_weight * self.stft_loss(clean_for_stft, enhanced_for_stft)
+            self.si_sdr_loss(enhanced, clean)
+            + self._stft_weight * self.stft_loss(enhanced_for_stft, clean_for_stft)
         )
     
     def _log_diagnostics(self, clean, enhanced, batch, mode: str, batch_idx: int) -> None:
@@ -114,15 +115,28 @@ class DCCTN(BaseModel):
         )
         stft_logmag = F.l1_loss(torch.log(mag_enh), torch.log(mag_clean),
                                 reduction="none").mean(dim=(1, 2))
-        sisdr = -self.si_sdr_loss(clean, enhanced).detach()
+        sisdr = -self.si_sdr_loss(enhanced, clean).detach()
 
-        scale = batch["scale"]
-        if not isinstance(scale, torch.Tensor):
-            scale = torch.tensor(scale, device=clean.device, dtype=clean.dtype)
+        clean_flat = clean.reshape(clean.size(0), -1)
+        enh_flat = enhanced.reshape_as(clean_flat)
+        diff_flat = enh_flat - clean_flat
+        signal_pow = clean_flat.pow(2).mean(dim=1)
+        noise_pow = diff_flat.pow(2).mean(dim=1)
+        snr = 10.0 * torch.log10(signal_pow.clamp_min(self._diag_eps) /
+                                 noise_pow.clamp_min(self._diag_eps))
+        sdsdr_num = clean_flat.pow(2).sum(dim=1)
+        sdsdr_den = diff_flat.pow(2).sum(dim=1)
+        sdsdr = 10.0 * torch.log10(sdsdr_num.clamp_min(self._diag_eps) /
+                                   sdsdr_den.clamp_min(self._diag_eps))
+        logcosh = (F.softplus(2.0 * diff_flat) - diff_flat - math.log(2.0)).mean(dim=1)
+
+        scale_clean = batch["scale_clean"]
+        if not isinstance(scale_clean, torch.Tensor):
+            scale_clean = torch.tensor(scale_clean, device=clean.device, dtype=clean.dtype)
         else:
-            scale = scale.to(clean.device, clean.dtype)
-        clean_dn = clean * scale.unsqueeze(-1)
-        enh_dn = enhanced * scale.unsqueeze(-1)
+            scale_clean = scale_clean.to(clean.device, clean.dtype)
+        clean_dn = clean * scale_clean.unsqueeze(-1)
+        enh_dn = enhanced * scale_clean.unsqueeze(-1)
         mfcc_cos = torch.tensor(
             [self.csmfcc_fn(c.cpu().numpy(), e.cpu().numpy())
              for c, e in zip(clean_dn.detach(), enh_dn.detach())],
@@ -135,6 +149,9 @@ class DCCTN(BaseModel):
         self.log(f"{mode}/stft_sc", stft_sc.mean(), batch_size=batch_sz)
         self.log(f"{mode}/stft_logmag", stft_logmag.mean(), batch_size=batch_sz)
         self.log(f"{mode}/mfcc_cos", mfcc_cos.mean(), batch_size=batch_sz)
+        self.log(f"{mode}/snr", snr.mean(), batch_size=batch_sz)
+        self.log(f"{mode}/sdsdr", sdsdr.mean(), batch_size=batch_sz)
+        self.log(f"{mode}/logcosh", logcosh.mean(), batch_size=batch_sz)
 
         fs = batch.get("fs", 8000.0)
         if isinstance(fs, torch.Tensor):
@@ -193,7 +210,7 @@ class DCCTN(BaseModel):
     
     def validation_step(self, batch, batch_idx):
         enhanced, clean, task = self.common_step(batch, batch_idx, mode="val")
-        loss = self.loss_function(clean, enhanced)
+        loss = self.loss_function(enhanced, clean)
         self.log("val/loss", loss, logger=True)
         with torch.no_grad():
             self._log_diagnostics(clean, enhanced, batch, mode="val", batch_idx=batch_idx)
@@ -201,12 +218,12 @@ class DCCTN(BaseModel):
             self.val_outputs.append(enhanced.detach().cpu().numpy())
             self.val_targets.append(clean.detach().cpu().numpy())
             self.val_tasks.append(task)
-            scale = batch["scale"]
-            if isinstance(scale, torch.Tensor):
-                scale = scale.detach().cpu().numpy()
+            scale_clean = batch["scale_clean"]
+            if isinstance(scale_clean, torch.Tensor):
+                scale_clean = scale_clean.detach().cpu().numpy()
             else:
-                scale = np.asarray(scale)
-            self.val_scales.append(scale)
+                scale_clean = np.asarray(scale_clean)
+            self.val_clean_scales.append(scale_clean)
         return loss
 
     def configure_optimizers(self):

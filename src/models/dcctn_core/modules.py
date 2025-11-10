@@ -295,40 +295,50 @@ class ComplexGRU(nn.Module):
 
 
 class Transformer_single(nn.Module):
-    def __init__(self, nhead=8):
-        super(Transformer_single, self).__init__()
-        self.nhead = nhead
+    def __init__(self, d_model, nhead=8, device=None):
+            super().__init__()
+            self.nhead = nhead
+            self.d_model = d_model
+            self.block = TransformerEncoderLayer(d_model=d_model, nhead=nhead) 
 
     def forward(self, x):
-        # x = torch.randn(10, 2, 80, 256) [batch, Ch, F, T]
-        b, c, F, T = x.shape
-        STB = TransformerEncoderLayer(d_model=F, nhead=self.nhead)  # d_model = Expected feature
-        STB.to("cuda")
-        x = x.permute(1, 0, 3, 2).contiguous().view(-1, b * T, F)  # [c, b*T, F]
-        x = x.to("cuda")
-        x = STB(x)
-        x = x.view(b, c, F, T)  # [b, c, F, T]
-        return x
+        b, c, f, t = x.shape
+        assert c == self.d_model, f"Expected channels={self.d_model}, got {c}"
+        seq = x.permute(2, 3, 0, 1).reshape(f * t, b, c)   # (L=f*t, N=b, E=c)
+        out = self.block(seq)                              # same shape
+        out = out.reshape(f, t, b, c).permute(2, 3, 0, 1).contiguous()
+        return out    #     # x = torch.randn(10, 2, 80, 256) [batch, Ch, F, T]
+    #     b, c, F, T = x.shape
+    #     STB = TransformerEncoderLayer(d_model=F, nhead=self.nhead)  # d_model = Expected feature
+    #     STB.to("cuda")
+    #     x = x.permute(1, 0, 3, 2).contiguous().view(-1, b * T, F)  # [c, b*T, F]
+    #     x = x.to("cuda")
+    #     x = STB(x)
+    #     x = x.view(b, c, F, T)  # [b, c, F, T]
+    #     return x
 
 
 class Transformer_multi(nn.Module):
     # d_model = x.shape[3]
-    def __init__(self, nhead, layer_num=2):
-        super(Transformer_multi, self).__init__()
+    def __init__(self, d_model, nhead, layer_num=2):
+        super().__init__()
         self.layer_num = layer_num
-        self.MTB = Transformer_single(nhead=nhead)  # d_model: the number of expected features in the input
+        self.blocks = nn.ModuleList(
+        Transformer_single(d_model=d_model, nhead=nhead) for _ in range(layer_num)
+        )
+        # self.MTB = Transformer_single(feature_dim=feature_dim, nhead=nhead)  # d_model: the number of expected features in the input
 
     def forward(self, x):
-        for i in range(self.layer_num):
-            x = self.MTB(x)
+        for blk in self.blocks:
+            x = blk(x)
         return x
 
 
 class ComplexTransformer(nn.Module):
-    def __init__(self, nhead, num_layer):
-        super(ComplexTransformer, self).__init__()
-        self.rTrans = Transformer_multi(nhead=nhead, layer_num=num_layer)  # d_model = x.shape[3]
-        self.iTrans = Transformer_multi(nhead=nhead, layer_num=num_layer)  # d_model = x.shape[3]
+    def __init__(self, d_model, nhead, num_layer):
+        super().__init__()
+        self.rTrans = Transformer_multi(d_model=d_model, nhead=nhead, layer_num=num_layer)  # d_model = x.shape[3]
+        self.iTrans = Transformer_multi(d_model=d_model, nhead=nhead, layer_num=num_layer)  # d_model = x.shape[3]
         # self.Trans = Transformer_multi(nhead=17, layer_num=num_layer)
 
     def forward(self, x):
@@ -486,7 +496,7 @@ class TransformerEncoderLayer(Module):
 
     def __init__(self, d_model, nhead, bidirectional=True, dropout=0, activation="relu"):
         super(TransformerEncoderLayer, self).__init__()
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout).to("cuda")
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
         # Implementation of Feedforward model
         # self.linear1 = Linear(d_model, dim_feedforward)
         self.gru = GRU(d_model, d_model * 2, 1, bidirectional=bidirectional)

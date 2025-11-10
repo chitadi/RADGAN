@@ -45,12 +45,14 @@ class BaseModel(pl.LightningModule):
         self.val_outputs = []
         self.val_targets = []
         self.val_tasks = []
-        self.val_scales = []
+        self.val_recorded_scales = []
+        self.val_clean_scales = []
 
         self.test_outputs = []
         self.test_targets = []
         self.test_tasks = []
-        self.test_scales = []
+        self.test_recorded_scales = []
+        self.test_clean_scales = []
         
         self.heavy_eval = False
 
@@ -70,25 +72,29 @@ class BaseModel(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         enhanced, clean, task = self.common_step(batch, batch_idx, mode="train")
-        loss = self.loss_function(clean, enhanced)
-        scale = batch["scale"]
-        if not isinstance(scale, torch.Tensor):
-            scale = torch.as_tensor(scale, device=self.device, dtype=torch.float32)
+        loss = self.loss_function(enhanced, clean)
+        scale_recorded = batch["scale_recorded"]
+        scale_clean = batch["scale_clean"]
+        if not isinstance(scale_recorded, torch.Tensor):
+            scale_recorded = torch.as_tensor(scale_recorded, device=self.device, dtype=torch.float32)
+        if not isinstance(scale_clean, torch.Tensor):
+            scale_clean = torch.as_tensor(scale_clean, device=self.device, dtype=torch.float32)
         self.log(f'train/loss', loss, on_step=True, on_epoch=True, prog_bar=False, logger=True)
-        self.log("train/scale_mean", scale.mean(), prog_bar=False, on_step=True)
-        self.log("train/scale_std", scale.std(unbiased=False), prog_bar=False, on_step=True)
+        # self.log("train/scale_mean", scale.mean(), prog_bar=False, on_step=True)
+        # self.log("train/scale_std", scale.std(unbiased=False), prog_bar=False, on_step=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
 
         enhanced, clean, task = self.common_step(batch, batch_idx, mode="val")
-        loss = self.loss_function(clean, enhanced)
+        loss = self.loss_function(enhanced, clean)
         self.log(f'val/loss', loss, logger=True)
         if self.heavy_eval:
             self.val_outputs.append(enhanced.detach().cpu().numpy())
             self.val_targets.append(clean.detach().cpu().numpy())
             self.val_tasks.append(task)
-            self.val_scales.append(batch["scale"].detach().cpu().numpy() if isinstance(batch["scale"], torch.Tensor) else np.asarray(batch["scale"]))
+            self.val_recorded_scales.append(batch["scale_recorded"].detach().cpu().numpy() if isinstance(batch["scale_recorded"], torch.Tensor) else np.asarray(batch["scale_recorded"]))
+            self.val_clean_scales.append(batch["scale_clean"].detach().cpu().numpy() if isinstance(batch["scale_clean"], torch.Tensor) else np.asarray(batch["scale_clean"]))
 
         return loss
 
@@ -97,16 +103,18 @@ class BaseModel(pl.LightningModule):
         self.test_outputs.append(enhanced.detach().cpu().numpy())
         self.test_targets.append(clean.detach().cpu().numpy())
         self.test_tasks.append(task)
-        self.test_scales.append(batch["scale"].detach().cpu().numpy() if isinstance(batch["scale"], torch.Tensor) else np.asarray(batch["scale"]))
+        self.test_recorded_scales.append(batch["scale_recorded"].detach().cpu().numpy() if isinstance(batch["scale_recorded"], torch.Tensor) else np.asarray(batch["scale_recorded"]))
+        self.test_clean_scales.append(batch["scale_clean"].detach().cpu().numpy() if isinstance(batch["scale_clean"], torch.Tensor) else np.asarray(batch["scale_clean"]))
 
-    def metrics_evaluation(self, mode, outputs, targets, tasks, scales):
+    def metrics_evaluation(self, mode, outputs, targets, tasks, clean_scales):
         
         refs_denorm, degs_denorm = [], []
         flat_tasks = []
-        for batch_out, batch_ref, batch_task, batch_scale in zip(outputs, targets, tasks, scales):
-            batch_scale = np.asarray(batch_scale).astype(np.float64).reshape(-1)
+        for batch_out, batch_ref, batch_task, batch_scale in zip(outputs, targets, tasks, clean_scales):
+            batch_scale_clean = np.asarray(batch_scale).astype(np.float64).reshape(-1)
             denorm_refs, denorm_degs = [], []
-            for out, ref, scale in zip(batch_out, batch_ref, batch_scale):
+            for out, ref, scale in zip(batch_out, batch_ref, batch_scale_clean):
+                scale = float(scale)
                 denorm_refs.append(np.asarray(ref).squeeze() * scale)
                 denorm_degs.append(np.asarray(out).squeeze() * scale)
             refs_denorm.append(denorm_refs)
@@ -194,12 +202,13 @@ class BaseModel(pl.LightningModule):
                 self.val_outputs, 
                 self.val_targets, 
                 self.val_tasks,
-                self.val_scales)
+                self.val_clean_scales)
 
             self.val_outputs.clear()
             self.val_targets.clear()
             self.val_tasks.clear()
-            self.val_scales.clear()
+            self.val_recorded_scales.clear()
+            self.val_clean_scales.clear()
 
 
     def on_test_epoch_end(self):
@@ -208,12 +217,13 @@ class BaseModel(pl.LightningModule):
             self.test_outputs, 
             self.test_targets, 
             self.test_tasks,
-            self.test_scales)
+            self.test_clean_scales)
 
         self.test_outputs.clear()
         self.test_targets.clear()
         self.test_tasks.clear()
-        self.test_scales.clear()
+        self.test_recorded_scales.clear()
+        self.test_clean_scales.clear()
 
     def on_after_backward(self):
         total_norm_sq = 0.0
