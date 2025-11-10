@@ -20,8 +20,10 @@ from oracle_wiener import oracle_wiener, load_waveform
 # DATASET_FOLDER = "/data/"
 DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
 class WavPairDataset(Dataset):
-    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, amp_norm="rms", percentile=95, eps=1e-8,
-                 energy_crop=False, energy_threshold=0.05, random_crop=True, crop_jitter=0.5):
+    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, 
+                 amp_norm="rms", percentile=95, eps=1e-8,
+                 energy_crop=False, energy_threshold=0.05, random_crop=False, 
+                 crop_jitter=0.5, fixed_window=True, fixed_start_sec=0.0):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
         self.task = task
@@ -33,6 +35,8 @@ class WavPairDataset(Dataset):
         self.energy_threshold = energy_threshold
         self.random_crop = random_crop
         self.crop_jitter = crop_jitter
+        self.fixed_window = fixed_window
+        self.fixed_start_sec = fixed_start_sec
         assert len(self.recorded_wav_filepaths) == len(self.clean_wav_filepaths) 
         assert len(self.recorded_wav_filepaths) > 0
     
@@ -62,6 +66,14 @@ class WavPairDataset(Dataset):
     def _extract_window(self, recorded, clean, sample_length):
         if len(recorded) <= sample_length:
             return recorded[:sample_length], clean[:sample_length]
+        
+        # change knobs in init
+        if getattr(self, "fixed_window", False):
+            start = int(round(self.fixed_start_sec * self.fs))
+            max_start = max(len(recorded) - sample_length, 0)
+            start = max(0, min(start, max_start))
+            end = start + sample_length
+            return recorded[start:end], clean[start:end]
 
         center = self._active_center(recorded) if self.energy_crop else len(recorded) // 2
 
@@ -169,7 +181,9 @@ class DataModule(pl.LightningDataModule):
         batch_size,
         length_sec,
         num_workers=0,
-        pin_memory=False
+        pin_memory=False,
+        crop_fixed_on=None, 
+        fixed_start_sec=0.0
         ):
         super().__init__()
 
@@ -180,6 +194,8 @@ class DataModule(pl.LightningDataModule):
         self.dataset = {"train": [], "val": [], "test": []}
         self.num_workers = num_workers
         self.pin_memory = pin_memory
+        self.crop_fixed_on = set(crop_fixed_on or []) # e.g., {"train"}, {"train","val"}
+        self.fixed_start_sec = float(fixed_start_sec)
     # def print_summary(self):
 
     #     for mode in self.modes:
@@ -241,13 +257,16 @@ class DataModule(pl.LightningDataModule):
                 #     task=task, 
                 #     length_sec=self.length_sec)
                 
+                fixed = (mode in self.crop_fixed_on) 
                 self.dataset[mode].append(
                     WavPairDataset(recorded_wav_filepaths, 
                     clean_wav_filepaths, 
                     task=task, 
                     length_sec=self.length_sec,
-                    random_crop=(mode == "train"),
-                    energy_crop=(mode != "train"),)
+                    random_crop=(mode == "train") and not fixed,
+                    energy_crop=(mode != "train") and not fixed,
+                    fixed_window=fixed,
+                    fixed_start_sec=self.fixed_start_sec,)
                 )
                 
         # after all tasks/modes have been loaded
