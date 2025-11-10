@@ -333,7 +333,6 @@ class Transformer_multi(nn.Module):
             x = blk(x)
         return x
 
-
 class ComplexTransformer(nn.Module):
     def __init__(self, d_model, nhead, num_layer):
         super().__init__()

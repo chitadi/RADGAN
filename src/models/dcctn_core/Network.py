@@ -1,6 +1,7 @@
 from .modules import *
 import warnings
 import math
+import math
 
 # ----------------------------------------------------------------------------
 # Implementation of three networks (CFTNet, DCCTN, and DATCFTNet) for speech enhancement.
@@ -353,6 +354,11 @@ class DCCTN(torch.nn.Module):
         enhanced = self.deepfiltering(deepfilter, cplxIn)
         enh_mag, enh_phase = enhanced.abs(), enhanced.angle()
         audio_enh = self.istft(enh_mag, enh_phase, squeeze=True)
+        
+        #adding GRU smoothening after istft
+        # seq = audio_enh.unsqueeze(-1)               # (B, T, 1)
+        # gru_out, _ = self.refine_gru(seq)
+        # audio_enh = self.refine_proj(gru_out).squeeze(-1)
         if verbose: print('*' * 60)
         if verbose: print('Output Audio Shape        : ', audio_enh.shape)
         if verbose: print('*' * 60)

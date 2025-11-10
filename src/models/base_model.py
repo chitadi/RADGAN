@@ -47,10 +47,14 @@ class BaseModel(pl.LightningModule):
         self.val_tasks = []
         self.val_recorded_scales = []
         self.val_clean_scales = []
+        self.val_recorded_scales = []
+        self.val_clean_scales = []
 
         self.test_outputs = []
         self.test_targets = []
         self.test_tasks = []
+        self.test_recorded_scales = []
+        self.test_clean_scales = []
         self.test_recorded_scales = []
         self.test_clean_scales = []
         
