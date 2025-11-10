@@ -143,7 +143,7 @@ class WavPairDataset(Dataset):
         recorded_tensor = recorded_tensor.unsqueeze(1)  # (T,) -> (T, 1)
         clean_tensor    = clean_tensor.unsqueeze(1)     # (T,) -> (T, 1)
 
-        recorded_tensor = oracle_wiener(recorded_tensor, clean_tensor, fs)
+        # recorded_tensor = oracle_wiener(recorded_tensor, clean_tensor, fs)
 
         recorded_tensor = recorded_tensor.squeeze(1)  # (T, 1) -> (T,)
         clean_tensor    = clean_tensor.squeeze(1)     # (T, 1) -> (T,)
