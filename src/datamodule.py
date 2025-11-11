@@ -23,8 +23,8 @@ DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
 class WavPairDataset(Dataset):
     def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, 
                  amp_norm="rms", percentile=95, eps=1e-8,
-                 energy_crop=False, energy_threshold=0.05, random_crop=False, 
-                 crop_jitter=0.5, fixed_window=True, fixed_start_sec=0.0):
+                 energy_crop=False, energy_threshold=0.05, random_crop=True, 
+                 crop_jitter=0.5, fixed_window=False, fixed_start_sec=0.0):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
         self.task = task

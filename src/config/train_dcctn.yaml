@@ -1,22 +1,22 @@
 datamodule:
   length_sec: 4
   batch_size: 32
-  crop_fixed_on: ["train", "val"]
-  fixed_start_sec: 0.0
+  # crop_fixed_on: ["train", "val"]
+  # fixed_start_sec: 0.0
 
 model: "dcctn"        # new LightningModule wrapping Network.DCCTN
 model_params:
   learning_rate: 1.0e-4
   # change this back
   weight_decay: 1.0e-5
-  betas: [0.5, 0.999]
+  betas: [0.9, 0.999]
   stft_loss_config:
     fft_size: 256
     hop_size: 128
     win_length: 256
     scale_invariance: false
     w_sc: 1.0
-    weight: 25.0
+    weight: 25
   # stft_loss_config:
   #   kind: "multi"
   #   fft_sizes: [128, 256, 512]
@@ -76,14 +76,14 @@ trainer:
     limit_val_batches: 5
     gradient_clip_val: 0.5
     # strategy: "ddp_spawn"
-    devices: [0]
+    devices: [1]
     accelerator: "gpu"
   full:
     max_epochs: 20
     gradient_clip_val: 10.0
     accumulate_grad_batches: 8
     # strategy: "ddp"
-    devices: [0]        # list for multi-GPU
+    devices: [1]        # list for multi-GPU
     accelerator: "gpu"
   logging:
     use_wandb: true
