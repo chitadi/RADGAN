@@ -163,6 +163,9 @@ class WavPairDataset(Dataset):
         # scale_clean = torch.tensor(max(clean_tensor.abs().max().item(), 1e-8), dtype=clean_tensor.dtype)
         # scale = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
         scale_clean = scale_recorded
+
+        recorded_tensor = recorded_tensor / scale_recorded
+        clean_tensor = clean_tensor / scale_recorded
         
         return {
             "recorded": recorded_tensor,
