@@ -80,7 +80,7 @@ trainer:
     accelerator: "gpu"
   full:
     max_epochs: 20
-    gradient_clip_val: 1.0
+    gradient_clip_val: 10.0
     accumulate_grad_batches: 8
     # strategy: "ddp"
     devices: [0]        # list for multi-GPU
