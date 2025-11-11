@@ -15,7 +15,8 @@ import torchaudio
 from utils import safe_open_yaml
 import math
 from loguru import logger
-from oracle_wiener import oracle_wiener, load_waveform
+import noise_reduction as nr
+import scipy.io.wavfile as wav
 
 # DATASET_FOLDER = "/data/"
 DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
@@ -49,19 +50,31 @@ class WavPairDataset(Dataset):
             scale = torch.sqrt(torch.mean(tensor.pow(2)) + self.eps)
         return scale.clamp_min(self.eps)
     
-    def _active_center(self, x: torch.Tensor) -> int:
-        # Find the midpoint of the “active” region above a fraction of the peak
-        if x.numel() == 0:
+    def _active_center(self, x):
+        # Torch path
+        if isinstance(x, torch.Tensor):
+            if x.numel() == 0:
+                return 0
+            peak = float(x.abs().max())
+            if not np.isfinite(peak) or peak < self.eps:
+                return 0
+            thr = self.energy_threshold * peak
+            idx = (x.abs() >= thr).nonzero(as_tuple=False).squeeze(-1)
+            if idx.numel() == 0:
+                return 0
+            return int((idx[0] + idx[-1]).item() // 2)
+        # NumPy path
+        x = np.asarray(x)
+        if x.size == 0:
             return 0
-        peak = float(x.abs().max())
+        peak = float(np.abs(x).max())
         if not np.isfinite(peak) or peak < self.eps:
             return 0
         thr = self.energy_threshold * peak
-        idx = (x.abs() >= thr).nonzero(as_tuple=False).squeeze(-1)
-        if idx.numel() == 0:
+        idx = np.flatnonzero(np.abs(x) >= thr)
+        if idx.size == 0:
             return 0
-        center = int((idx[0] + idx[-1]).item() // 2)
-        return center
+        return int((idx[0] + idx[-1]) // 2)
     
     def _extract_window(self, recorded, clean, sample_length):
         if len(recorded) <= sample_length:
@@ -102,15 +115,17 @@ class WavPairDataset(Dataset):
 
         # recorded, recorded_fs = sf.read(self.recorded_wav_filepaths[idx], dtype=np.float32)
         # clean, clean_fs       = sf.read(self.clean_wav_filepaths[idx], dtype=np.float32)
-        clean, clean_fs = load_waveform(self.clean_wav_filepaths[idx])
-        recorded, recorded_fs = load_waveform(self.recorded_wav_filepaths[idx])
         
-        # recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
-        # clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
+        recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
+        clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
 
-        recorded = recorded.squeeze(-1).to(torch.float32)
-        clean    = clean.squeeze(-1).to(torch.float32)
+        # recorded = recorded.squeeze(-1).to(torch.float32)
+        clean    = clean.squeeze(0).to(torch.float32)
 
+        noise_begin, noise_end = 0.0, 0.75
+        w = nr.Wiener(self.recorded_wav_filepaths[idx], noise_begin, noise_end)
+        rec_np = w.wiener_two_step(save_path=None) # (N, 1), float64
+        recorded = torch.from_numpy(rec_np.squeeze(-1).astype(np.float32)) # (N,)
 
         assert recorded_fs == clean_fs
         fs = clean_fs
@@ -121,7 +136,7 @@ class WavPairDataset(Dataset):
         # temporarily cut off to align later
         recorded = recorded[:len(clean)]
 
-        sample_length = self.length_sec * fs
+        sample_length = int(self.length_sec * fs)
         recorded, clean = self._extract_window(recorded, clean, sample_length)
 
         recorded_padded = np.zeros(sample_length, dtype=np.float32)
@@ -149,17 +164,6 @@ class WavPairDataset(Dataset):
         # scale = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
         scale_clean = scale_recorded
         
-        recorded_tensor = recorded_tensor / scale_recorded
-        clean_tensor = clean_tensor / scale_recorded
-        
-        recorded_tensor = recorded_tensor.unsqueeze(1)  # (T,) -> (T, 1)
-        clean_tensor    = clean_tensor.unsqueeze(1)     # (T,) -> (T, 1)
-
-        # recorded_tensor = oracle_wiener(recorded_tensor, clean_tensor, fs)
-
-        recorded_tensor = recorded_tensor.squeeze(1)  # (T, 1) -> (T,)
-        clean_tensor    = clean_tensor.squeeze(1)     # (T, 1) -> (T,)
-
         return {
             "recorded": recorded_tensor,
             "clean": clean_tensor,
