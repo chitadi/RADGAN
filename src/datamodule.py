@@ -120,12 +120,13 @@ class WavPairDataset(Dataset):
         clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
 
         # recorded = recorded.squeeze(-1).to(torch.float32)
+        recorded = recorded.squeeze(0).to(torch.float32)
         clean    = clean.squeeze(0).to(torch.float32)
 
-        noise_begin, noise_end = 0.0, 0.75
-        w = nr.Wiener(self.recorded_wav_filepaths[idx], noise_begin, noise_end)
-        rec_np = w.wiener_two_step(save_path=None) # (N, 1), float64
-        recorded = torch.from_numpy(rec_np.squeeze(-1).astype(np.float32)) # (N,)
+        # noise_begin, noise_end = 0.0, 0.75
+        # w = nr.Wiener(self.recorded_wav_filepaths[idx], noise_begin, noise_end)
+        # rec_np = w.wiener_two_step(save_path=None) # (N, 1), float64
+        # recorded = torch.from_numpy(rec_np.squeeze(-1).astype(np.float32)) # (N,)
 
         assert recorded_fs == clean_fs
         fs = clean_fs
@@ -158,7 +159,9 @@ class WavPairDataset(Dataset):
         clean_tensor = torch.from_numpy(clean_padded)
 
         # can change this to 1e-10 as well
-        scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
+        # scale_val = max(recorded_tensor.abs().max().item(), 1e-8)
+        scale_val = max(clean_tensor.abs().max().item(), 1e-8)
+        # scale_val = self._compute_scale(recorded_tensor)
         scale_recorded = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
         # scale_clean = torch.tensor(max(clean_tensor.abs().max().item(), 1e-8), dtype=clean_tensor.dtype)
         # scale = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
