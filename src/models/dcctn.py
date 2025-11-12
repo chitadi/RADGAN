@@ -94,6 +94,13 @@ class DCCTN(BaseModel):
             + self._stft_weight * self.stft_loss(enhanced_for_stft, clean_for_stft)
         )
     
+    def _loss_components(self, enhanced: torch.Tensor, clean: torch.Tensor):
+        clean_for_stft = clean.unsqueeze(1) if clean.dim() == 2 else clean
+        enhanced_for_stft = enhanced.unsqueeze(1) if enhanced.dim() == 2 else enhanced
+        si = self.si_sdr_loss(enhanced, clean)
+        st = self.stft_loss(enhanced_for_stft, clean_for_stft)
+        return si, st
+    
     def _log_diagnostics(self, clean, enhanced, batch, mode: str, batch_idx: int) -> None:
         cfg = self._diag_cfg
         window = self.diag_window.to(clean.device)
@@ -208,10 +215,29 @@ class DCCTN(BaseModel):
                 commit=False,
             )
     
+    def training_step(self, batch, batch_idx):
+        enhanced, clean, task = self.common_step(batch, batch_idx, mode="train")
+        si, st = self._loss_components(enhanced, clean)
+        loss = si + self._stft_weight * st
+        bsz = clean.size(0)
+        self.log("train/si_sdr_loss", si, on_step=True, on_epoch=True, batch_size=bsz)
+        self.log("train/stft_loss", st, on_step=True, on_epoch=True, batch_size=bsz)
+        # Optional: log weighted STFT or SISDR metric in dB
+        # self.log("train/stft_loss_weighted", self._stft_weight * st, on_step=True, on_epoch=True, batch_size=bsz)
+        # self.log("train/sisdr", (-si).detach(), on_step=True, on_epoch=True, batch_size=bsz)
+        self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, batch_size=bsz)
+        return loss
+    
     def validation_step(self, batch, batch_idx):
         enhanced, clean, task = self.common_step(batch, batch_idx, mode="val")
-        loss = self.loss_function(enhanced, clean)
-        self.log("val/loss", loss, on_epoch=True, on_step=False, logger=True)
+        # loss = self.loss_function(enhanced, clean)
+        # self.log("val/loss", loss, on_epoch=True, on_step=False, logger=True)
+        si, st = self._loss_components(enhanced, clean)
+        loss = si + self._stft_weight * st
+        bsz = clean.size(0)
+        self.log("val/si_sdr_loss", si, on_step=False, on_epoch=True, batch_size=bsz)
+        self.log("val/stft_loss", st, on_step=False, on_epoch=True, batch_size=bsz)
+        self.log("val/loss", loss, on_epoch=True, on_step=False, logger=True, batch_size=bsz)
         with torch.no_grad():
             self._log_diagnostics(clean, enhanced, batch, mode="val", batch_idx=batch_idx)
         if self.heavy_eval:
