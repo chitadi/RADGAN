@@ -3,8 +3,8 @@ import numpy as np
 import torchaudio
 import pywt
 
-WAVELET     = "sym8"    # typical choices: 'db8', 'sym8', 'coif5'
-LEVEL       = 10     
+WAVELET     = "coif5"  
+LEVEL       = 7    
 CYCLE_SPINS = 0        # 0 disables cycle-spinning; try 4, 8, or 16 for -5 dB
 PLOT        = True     # quick before/after visualization
 
