@@ -8,7 +8,7 @@ import models
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config/train_dcctn.yaml")
 CHECKPOINT_PATH = os.path.join(
     os.path.dirname(__file__),
-    "dcctn_learning_rate=0.0001_weight_decay=1e-05_betas=79791a4d_stft_loss_config=cfg-12aecd2a_backbone_kwargs=cfg-c0580252/version_5/checkpoints/epoch=009-step=420-val/loss=120.29.ckpt"
+    "logs/dcctn_learning_rate=0.0001_weight_decay=1e-05_betas=79791a4d_stft_loss_config=cfg-12aecd2a_backbone_kwargs=cfg-c0580252/version_5/checkpoints/epoch=009-step=420-val/loss=120.29.ckpt"
     )
 
 # Point to your audio here
