@@ -1,26 +1,25 @@
+import os
 import torch
+import torchaudio
 import soundfile as sf
-from datamodule import DataModule
 from utils import safe_open_yaml
 import models
-import os
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config/train_dcctn.yaml")
 CHECKPOINT_PATH = os.path.join(
     os.path.dirname(__file__),
-    # "logs/dcctn__learning_rate=0.0003_weight_decay=1e-05_betas=[0.5, 0.999]_"
-    # "stft_loss_config={'fft_size': 320, 'hop_size': 80, 'win_length': 320, "
-    # "'scale_invariance': False, 'w_sc': 0.0, 'weight': 50.0}/version_8/"
-    # "checkpoints/epoch=011-step=3972-val/loss=84.22.ckpt"
-    "logs/dcctn_learning_rate=0.0001_weight_decay=1e-05_betas=8421bd69_stft_loss_config=cfg-1e1b5775_backbone_kwargs=cfg-c0580252/version_2/checkpoints/epoch=019-step=840-val/loss=102.34.ckpt"
-)
-SAMPLE_INDEX = 10
+    "logs/dcctn_learning_rate=0.0001_weight_decay=3e-06_betas=79791a4d_stft_loss_config=cfg-12aecd2a_backbone_kwargs=cfg-c0580252/version_1/checkpoints/epoch=014-step=630-val/loss=103.54.ckpt"
+    )
+
+# Point to your audio here
+AUDIO_PATH = "/~/projects/RASE-Challenge-team-quazo/dataset/Task1/Recorded/train/14-212-0024_recorded_aligned.wav"
+CLEAN_PATH = "/~/projects/RASE-Challenge-team-quazo/dataset/Task1/Clean/train/14-212-0024.wav"  # optional; set a path if you also want to save clean.wav
+
+# Optional: crop to the training window length (4 s in your config)
+CROP_TO_TRAIN_LENGTH = False
+FIXED_START_SEC = 0.0  # used only if CROP_TO_TRAIN_LENGTH is True
 
 config = safe_open_yaml(CONFIG_PATH)
-dm = DataModule(**config["datamodule"])
-dm.setup("fit")
-sample = dm.dataset["val"][SAMPLE_INDEX]
-fs = sample["fs"]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_cls = getattr(models, config["model"])
@@ -29,17 +28,53 @@ model = model_cls.load_from_checkpoint(
 ).to(device)
 model.eval()
 
-import torch
-x = torch.as_tensor(sample["recorded"], dtype=torch.float32).unsqueeze(0).to(device)
-scale_rec = float(torch.as_tensor(sample["scale_recorded"]))
-scale_clean = float(torch.as_tensor(sample["scale_clean"]))
-with torch.no_grad():
-    y = model(x).squeeze(0)
+# Load recorded audio (mimic datamodule: torchaudio.load(normalize=False))
+wav, fs = torchaudio.load(AUDIO_PATH, normalize=False)  # shape: (C, T)
+wav = wav.mean(dim=0) if wav.shape[0] > 1 else wav.squeeze(0)  # mono
+wav = wav.to(torch.float32)
 
-enhanced = (y.cpu() * scale_rec).clamp_(-1.0, 1.0)
-noisy = (torch.as_tensor(sample["recorded"], dtype=torch.float32) * scale_rec).clamp_(-1.0, 1.0)
-clean = (torch.as_tensor(sample["clean"], dtype=torch.float32) * scale_clean).clamp_(-1.0, 1.0)
+# Optional crop/pad to training length
+if CROP_TO_TRAIN_LENGTH:
+    length_sec = float(config["datamodule"]["length_sec"])
+    sample_len = int(length_sec * fs)
+    start = int(round(FIXED_START_SEC * fs))
+    start = max(0, min(start, max(0, wav.numel() - sample_len)))
+    end = start + sample_len
+    if wav.numel() < sample_len:
+        wpad = torch.zeros(sample_len, dtype=wav.dtype)
+        wpad[: wav.numel()] = wav
+        wav = wpad
+    else:
+        wav = wav[start:end]
+
+# Normalize like WavPairDataset
+eps = 1e-8
+scale_rec = float(max(wav.abs().max().item(), eps))
+x = (wav / scale_rec).unsqueeze(0).to(device)  # (1, T)
+
+with torch.no_grad():
+    y = model(x).squeeze(0)  # (T,)
+
+# Denormalize and save
+enhanced = (y.cpu() * scale_rec).clamp(-1.0, 1.0)
+noisy = (wav / scale_rec).clamp(-1.0, 1.0)  # normalized noisy for safe writing
 
 sf.write("noisy.wav", noisy.numpy(), fs)
-sf.write("clean.wav", clean.numpy(), fs)
 sf.write("enhanced.wav", enhanced.numpy(), fs)
+
+# Optional: also save a clean reference if you have it
+if CLEAN_PATH:
+    clean, clean_fs = torchaudio.load(CLEAN_PATH, normalize=False)
+    clean = clean.mean(dim=0) if clean.shape[0] > 1 else clean.squeeze(0)
+    clean = clean.to(torch.float32)
+    if clean_fs != fs:
+        clean = torchaudio.functional.resample(clean, orig_freq=clean_fs, new_freq=fs)
+    if CROP_TO_TRAIN_LENGTH:
+        if clean.numel() < sample_len:
+            cpad = torch.zeros(sample_len, dtype=clean.dtype)
+            cpad[: clean.numel()] = clean
+            clean = cpad
+        else:
+            clean = clean[start:end]
+    clean = (clean / scale_rec).clamp(-1.0, 1.0)  # match dataset's scale_clean = scale_recorded
+    sf.write("clean.wav", clean.numpy(), fs)
