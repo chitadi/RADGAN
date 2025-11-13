@@ -12,8 +12,8 @@ CHECKPOINT_PATH = os.path.join(
     )
 
 # Point to your audio here
-AUDIO_PATH = "/~/projects/RASE-Challenge-team-quazo/dataset/Task1/Recorded/train/14-212-0024_recorded_aligned.wav"
-CLEAN_PATH = "/~/projects/RASE-Challenge-team-quazo/dataset/Task1/Clean/train/14-212-0024.wav"  # optional; set a path if you also want to save clean.wav
+AUDIO_PATH = "/home/vedang/projects/RASE-Challenge-team-quazo/dataset/Task1/Recorded/train/14-212-0024_recorded_aligned.wav"
+CLEAN_PATH = "/home/vedang/projects/RASE-Challenge-team-quazo/dataset/Task1/Clean/train/14-212-0024.wav"  # optional; set a path if you also want to save clean.wav
 
 # Optional: crop to the training window length (4 s in your config)
 CROP_TO_TRAIN_LENGTH = False
