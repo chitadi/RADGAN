@@ -8,7 +8,7 @@ model: "dcctn"        # new LightningModule wrapping Network.DCCTN
 model_params:
   learning_rate: 1.0e-4
   # change this back
-  weight_decay: 1.0e-5
+  weight_decay: 1.0e-4
   betas: [0.9, 0.999]
   stft_loss_config:
     fft_size: 256
@@ -58,15 +58,14 @@ model_params:
   #   w_lin_mag: 0.0
   #   w_phs: 0.0
   #   n_mels: 80
-  backbone_kwargs:
-    dpt_chunk_size: 16
-    dpt_hop_size: 8
-    dpt_heads: 8
-    dpt_heads: 8
-    dpt_layers: 2
-    dpt_blocks: 2
-    dpt_dropout: 0.2
-    dpt_dropout: 0.2
+  # backbone_kwargs:
+  #   dpt_chunk_size: 16
+  #   dpt_hop_size: 8
+  #   dpt_heads: 8
+  #   dpt_heads: 8
+  #   dpt_layers: 2
+  #   dpt_blocks: 2
+  #   dpt_dropout: 0.2
 
 
 trainer:
@@ -79,7 +78,7 @@ trainer:
     devices: [1]
     accelerator: "gpu"
   full:
-    max_epochs: 25
+    max_epochs: 20
     gradient_clip_val: 10.0
     accumulate_grad_batches: 8
     # strategy: "ddp"

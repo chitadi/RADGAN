@@ -117,12 +117,12 @@ class WavPairDataset(Dataset):
         # recorded, recorded_fs = sf.read(self.recorded_wav_filepaths[idx], dtype=np.float32)
         # clean, clean_fs       = sf.read(self.clean_wav_filepaths[idx], dtype=np.float32)
         
-        # recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
-        rec_np = denoise_wavelet_bayeshrink(self.recorded_wav_filepaths[idx])
-        recorded = torch.from_numpy(rec_np).to(torch.float32)
+        recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
+        # rec_np = denoise_wavelet_bayeshrink(self.recorded_wav_filepaths[idx])
+        # recorded = torch.from_numpy(rec_np).to(torch.float32)
         clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
 
-        # recorded = recorded.squeeze(0).to(torch.float32)
+        recorded = recorded.squeeze(0).to(torch.float32)
         clean    = clean.squeeze(0).to(torch.float32)
 
         # assert recorded_fs == clean_fs
