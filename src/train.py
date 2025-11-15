@@ -166,10 +166,12 @@ if __name__ == "__main__":
     ########## RUN ACTUAL #################
     
     ckpt_callback = ModelCheckpoint(
-        monitor="val/loss", 
+        # monitor="val/loss", 
+        monitor="val/pesq_estoi_mfcc",
         save_top_k=5,
         filename='{epoch:03d}-{step}-{val/loss:.2f}',
-        mode="min",
+        # mode="min",
+        mode="max",
     )
     lr_monitor = LearningRateMonitor(logging_interval='step')
     pl_logger = CSVLogger("logs", name=f"{model_name}_{model_params_str}")

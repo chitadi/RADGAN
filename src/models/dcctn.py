@@ -238,6 +238,47 @@ class DCCTN(BaseModel):
         self.log("val/si_sdr_loss", si, on_step=False, on_epoch=True, batch_size=bsz)
         self.log("val/stft_loss", st, on_step=False, on_epoch=True, batch_size=bsz)
         self.log("val/loss", loss, on_epoch=True, on_step=False, logger=True, batch_size=bsz)
+        
+        scale_clean = batch["scale_clean"]
+        if isinstance(scale_clean, torch.Tensor):
+            scale_clean = scale_clean.to(clean.device, clean.dtype)
+        else:
+            scale_clean = torch.as_tensor(scale_clean, device=clean.device, dtype=clean.dtype)
+
+        clean_dn = clean * scale_clean.unsqueeze(-1)
+        enh_dn   = enhanced * scale_clean.unsqueeze(-1)
+
+        pesq_vals, estoi_vals, mfcc_vals = [], [], []
+        for c_t, e_t in zip(clean_dn, enh_dn):
+            c_np = c_t.detach().cpu().numpy()
+            e_np = e_t.detach().cpu().numpy()
+            try:
+                pesq_vals.append(self.pesq_fn(c_np, e_np))
+            except Exception:
+                pesq_vals.append(self.pesq_fn.min())
+            try:
+                estoi_vals.append(self.estoi_fn(c_np, e_np))
+            except Exception:
+                estoi_vals.append(self.estoi_fn.min())
+            try:
+                mfcc_vals.append(self.csmfcc_fn(c_np, e_np))
+            except Exception:
+                mfcc_vals.append(self.csmfcc_fn.min())
+
+        if pesq_vals:  # non‑empty batch
+            pesq_mean = torch.tensor(pesq_vals, device=self.device).mean()
+            estoi_mean = torch.tensor(estoi_vals, device=self.device).mean()
+            mfcc_mean = torch.tensor(mfcc_vals, device=self.device).mean()
+            pesq_estoi_mfcc = (pesq_mean + estoi_mean + mfcc_mean) / 3.0
+            self.log(
+                "val/pesq_estoi_mfcc",
+                pesq_estoi_mfcc,
+                on_step=False,
+                on_epoch=True,
+                batch_size=bsz,
+            )
+        
+        
         with torch.no_grad():
             self._log_diagnostics(clean, enhanced, batch, mode="val", batch_idx=batch_idx)
         if self.heavy_eval:
