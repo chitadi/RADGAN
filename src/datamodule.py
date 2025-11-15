@@ -25,7 +25,7 @@ class WavPairDataset(Dataset):
     def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, 
                  amp_norm="rms", percentile=95, eps=1e-8,
                  energy_crop=False, energy_threshold=0.05, random_crop=True, 
-                 crop_jitter=0.5, fixed_window=False, fixed_start_sec=0.0):
+                 crop_jitter=1.5, fixed_window=False, fixed_start_sec=0.0):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
         self.task = task
@@ -78,6 +78,9 @@ class WavPairDataset(Dataset):
         return int((idx[0] + idx[-1]) // 2)
     
     def _extract_window(self, recorded, clean, sample_length):
+        
+        # self.crop_jitter = np.random.uniform(0.25, 0.75)
+        
         if len(recorded) <= sample_length:
             return recorded[:sample_length], clean[:sample_length]
         
@@ -90,9 +93,13 @@ class WavPairDataset(Dataset):
             return recorded[start:end], clean[start:end]
 
         center = self._active_center(recorded) if self.energy_crop else len(recorded) // 2
-
+        # center = len(recorded) // 2
         if self.random_crop:
+            # center = self._active_center(clean)
             max_start = max(len(recorded) - sample_length, 0)
+            # margin_left  = min(center, max_start)        # how far we can move left
+            # margin_right = max_start - min(center, max_start)
+            # jitter = min(int(self.crop_jitter * self.fs), margin_left, margin_right)
             jitter = int(self.crop_jitter * self.fs) if self.crop_jitter else sample_length // 2
             jitter = max(1, jitter)
 
@@ -155,8 +162,8 @@ class WavPairDataset(Dataset):
         recorded_tensor = torch.from_numpy(recorded_padded)
         clean_tensor = torch.from_numpy(clean_padded)
 
-        # scale_val = max(clean_tensor.abs().max().item(), 1e-8)
-        scale_val = self._compute_scale(clean_tensor)
+        scale_val = max(clean_tensor.abs().max().item(), 1e-8)
+        # scale_val = self._compute_scale(clean_tensor)
         scale_recorded = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
         # scale_clean = torch.tensor(max(clean_tensor.abs().max().item(), 1e-8), dtype=clean_tensor.dtype)
         scale_clean = scale_recorded
