@@ -23,7 +23,6 @@ import math
 #------------------------------------------------------------------------------
 
 warnings.filterwarnings("ignore")
-torch.manual_seed(9999)
 EPS = torch.as_tensor(torch.finfo(torch.get_default_dtype()).eps)
 
 
