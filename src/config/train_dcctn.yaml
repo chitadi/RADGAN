@@ -16,7 +16,7 @@ model_params:
     win_length: 256
     scale_invariance: false
     w_sc: 1.0
-    weight: 25
+    weight: 5
   # stft_loss_config:
   #   kind: "multi"
   #   fft_sizes: [128, 256, 512]
