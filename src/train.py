@@ -97,6 +97,7 @@ def _validate(trainer, data_module, model_name, best_ckpt, model_params, save_di
 
 
 if __name__ == "__main__":
+    seed_everything(8, workers=True)
 
     config = safe_open_yaml(CONFIG_FILE)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -113,7 +114,6 @@ if __name__ == "__main__":
     model = _init_model(model_name, model_params)
 
     data_module = DataModule(**config["datamodule"])
-    seed_everything(8, workers=True)
 
     ckpt_callback = ModelCheckpoint(
         monitor="val/loss", 

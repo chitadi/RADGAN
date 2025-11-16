@@ -9,7 +9,7 @@ from datamodule import WavPairDataset
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config/train_dcctn.yaml")
 CHECKPOINT_PATH = os.path.join(
     os.path.dirname(__file__),
-    "logs/dcctn_learning_rate=0.0001_weight_decay=0.0001_betas=79791a4d_stft_loss_config=cfg-3a09dd93/version_5/checkpoints/epoch=017-step=756-val/loss=36.58.ckpt"
+    "logs/dcctn_learning_rate=0.0001_weight_decay=0.0001_betas=79791a4d_stft_loss_config=cfg-3a09dd93/version_7/checkpoints/epoch=016-step=714-val/loss=37.16.ckpt"
     )
 
 # Point to your audio here
