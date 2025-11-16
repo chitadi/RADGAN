@@ -18,6 +18,7 @@ from loguru import logger
 import noise_reduction as nr
 import scipy.io.wavfile as wav
 from bayes_shrink import denoise_wavelet_bayeshrink
+from enhance_lower_harmonics import enhance_low_harmonics_spectral
 
 # DATASET_FOLDER = "/data/"
 DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
@@ -138,6 +139,23 @@ class WavPairDataset(Dataset):
         if getattr(self, "fs", None) is None:
             self.fs = fs  # cache once for helper methods that need it
 
+        #converting to numpy array as enhance_lower_harmonic function requires input as a numpy array 
+        recorded_np = recorded.cpu().numpy()
+        
+        y_enh, S_orig, S_enh, f0 = enhance_low_harmonics_spectral(
+            recorded_np,
+            fs,
+            n_fft=256,
+            hop_length=128,
+            max_freq=1000.0,
+            num_harmonics=4,
+            bw_hz=20.0,
+            alpha=0.6,
+        )
+        # converting y_enh back to torch tensor to keep consistent flow
+        recorded = torch.from_numpy(y_enh.astype(np.float32))
+        
+        
         # temporarily cut off to align later
         recorded = recorded[:len(clean)]
 
