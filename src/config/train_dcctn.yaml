@@ -3,6 +3,7 @@ datamodule:
   batch_size: 32
   # crop_fixed_on: ["train", "val"]
   # fixed_start_sec: 0.0
+  num_workers: 2
 
 model: "dcctn"        # new LightningModule wrapping Network.DCCTN
 model_params:
