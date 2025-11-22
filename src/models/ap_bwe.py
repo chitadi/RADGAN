@@ -85,11 +85,17 @@ class ap_bwe(BaseModel):
         self.mrpd = MultiResolutionPhaseDiscriminator()
 
         # Loss weights from ap_bwe_train.py
-        self.w_mag = 45.0
-        self.w_pha = 100.0
-        self.w_com = 90.0
-        self.w_stft = 90.0
-        self.w_adv_scale = 0.1
+        # self.w_mag = 45.0
+        # self.w_pha = 100.0
+        # self.w_com = 90.0
+        # self.w_stft = 90.0
+        # self.w_adv_scale = 0.1
+        self.w_mag = 20.0
+        self.w_pha = 50.0
+        self.w_com = 45.0
+        self.w_stft = 45.0
+        self.w_adv_scale = 0.05
+
 
         self.learning_rate = learning_rate
         # Non‑adversarial mag/phase/complex/STFT loss for val/test
