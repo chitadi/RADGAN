@@ -353,7 +353,7 @@ class HiFiGAN(BaseModel):
         # 6) MR‑STFT waveform loss (4.3)
         loss_mrstft = self.mrstft(y_g_hat, y) * float(self.h.mrstft_weight)
         
-        loss_phase = self._phase_loss(y, y_g_hat)
+        # loss_phase = self._phase_loss(y, y_g_hat)
 
         # Combine generator losses (simplified from train_hifi_gan_finetune.py)
         loss_gen_all = (
@@ -361,7 +361,7 @@ class HiFiGAN(BaseModel):
             + loss_fm_s + loss_fm_f + loss_fm_m
             + loss_mel
             + loss_mrstft
-            + loss_phase
+            # + loss_phase
         )
         # loss_gen_all.backward()
         self.manual_backward(loss_gen_all)
