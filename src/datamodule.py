@@ -26,7 +26,7 @@ class WavPairDataset(Dataset):
     def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, 
                  amp_norm="rms", percentile=95, eps=1e-8,
                  energy_crop=False, energy_threshold=0.05, random_crop=True, 
-                 crop_jitter=1.5, fixed_window=False, fixed_start_sec=0.0):
+                 crop_jitter=2.0, fixed_window=False, fixed_start_sec=0.0):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
         self.task = task
@@ -87,9 +87,10 @@ class WavPairDataset(Dataset):
         
         # change knobs in init
         if getattr(self, "fixed_window", False):
-            start = int(round(self.fixed_start_sec * self.fs))
-            max_start = max(len(recorded) - sample_length, 0)
-            start = max(0, min(start, max_start))
+            # start = int(round(self.fixed_start_sec * self.fs))
+            # max_start = max(len(recorded) - sample_length, 0)
+            # start = max(0, min(start, max_start))
+            start = 0
             end = start + sample_length
             return recorded[start:end], clean[start:end]
 
@@ -122,38 +123,38 @@ class WavPairDataset(Dataset):
     def __getitem__(self, idx):
         
 
-        # recorded, recorded_fs = sf.read(self.recorded_wav_filepaths[idx], dtype=np.float32)
-        # clean, clean_fs       = sf.read(self.clean_wav_filepaths[idx], dtype=np.float32)
+        recorded, recorded_fs = sf.read(self.recorded_wav_filepaths[idx], dtype=np.float32)
+        clean, clean_fs       = sf.read(self.clean_wav_filepaths[idx], dtype=np.float32)
         
-        recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
+        # recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
         # rec_np = denoise_wavelet_bayeshrink(self.recorded_wav_filepaths[idx])
         # recorded = torch.from_numpy(rec_np).to(torch.float32)
-        clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
+        # clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
 
-        recorded = recorded.squeeze(0).to(torch.float32)
-        clean    = clean.squeeze(0).to(torch.float32)
+        # recorded = recorded.squeeze(0).to(torch.float32)
+        # clean    = clean.squeeze(0).to(torch.float32)
 
-        # assert recorded_fs == clean_fs
+        assert recorded_fs == clean_fs
         fs = clean_fs
 
         if getattr(self, "fs", None) is None:
             self.fs = fs  # cache once for helper methods that need it
 
         #converting to numpy array as enhance_lower_harmonic function requires input as a numpy array 
-        recorded_np = recorded.cpu().numpy()
+        # recorded_np = recorded.cpu().numpy()
         
-        y_enh, S_orig, S_enh, f0 = enhance_low_harmonics_spectral(
-            recorded_np,
-            fs,
-            n_fft=256,
-            hop_length=128,
-            max_freq=1000.0,
-            num_harmonics=4,
-            bw_hz=20.0,
-            alpha=0.6,
-        )
+        # y_enh, S_orig, S_enh, f0 = enhance_low_harmonics_spectral(
+        #     recorded_np,
+        #     fs,
+        #     n_fft=256,
+        #     hop_length=128,
+        #     max_freq=1000.0,
+        #     num_harmonics=4,
+        #     bw_hz=20.0,
+        #     alpha=0.6,
+        # )
         # converting y_enh back to torch tensor to keep consistent flow
-        recorded = torch.from_numpy(y_enh.astype(np.float32))
+        # recorded = torch.from_numpy(y_enh.astype(np.float32))
         
         
         # temporarily cut off to align later
@@ -186,8 +187,8 @@ class WavPairDataset(Dataset):
         # scale_clean = torch.tensor(max(clean_tensor.abs().max().item(), 1e-8), dtype=clean_tensor.dtype)
         scale_clean = scale_recorded
 
-        recorded_tensor = recorded_tensor / scale_recorded
-        clean_tensor = clean_tensor / scale_recorded
+        # recorded_tensor = recorded_tensor / scale_recorded
+        # clean_tensor = clean_tensor / scale_recorded
         
         return {
             "recorded": recorded_tensor,
