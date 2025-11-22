@@ -19,7 +19,7 @@ trainer:
     devices: [0]
     accelerator: "gpu"
   full:
-    max_epochs: 20
+    max_epochs: 40
     # gradient_clip_val: 10.0
     # accumulate_grad_batches: 8
     devices: [0]        # list for multi-GPU
