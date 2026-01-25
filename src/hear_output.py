@@ -6,15 +6,18 @@ from utils import safe_open_yaml
 import models
 from datamodule import WavPairDataset
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config/train_dcctn.yaml")
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config/train_hifi_gan.yaml")
 CHECKPOINT_PATH = os.path.join(
     os.path.dirname(__file__),
-    "logs/dcctn_learning_rate=0.0001_weight_decay=0.0001_betas=79791a4d_stft_loss_config=cfg-3a09dd93/version_7/checkpoints/epoch=016-step=714-val/loss=37.16.ckpt"
+    # "logs/dcctn_learning_rate=0.0001_weight_decay=0.0001_betas=79791a4d_stft_loss_config=multi-e743a5b6/version_0/checkpoints/epoch=013-step=588-val/loss=98.89.ckpt"
+    # "logs/ap_bwe_learning_rate=0.0001/version_0/checkpoints/epoch=008-step=11898-val/loss=906.14.ckpt"
+    # "logs/hifigan_learning_rate=0.0001/version_1/checkpoints/epoch=003-step=5288-val/loss=3.11.ckpt"
+    "/home/jagat/Chittem/RASE-Challenge-team-quazo/src/logs/hifigan_learning_rate=0.0001/version_7/checkpoints/epoch=041-step=55524-val/loss=3.04.ckpt"
     )
 
 # Point to your audio here
-AUDIO_PATH = "/home/jagat/Chittem/RASE-Challenge-team-quazo/dataset/Task1/Recorded/train/14-212-0024_recorded_aligned.wav"
-CLEAN_PATH = "/home/jagat/Chittem/RASE-Challenge-team-quazo/dataset/Task1/Clean/train/14-212-0024.wav"  # optional; set a path if you also want to save clean.wav
+AUDIO_PATH = "/home/jagat/Chittem/RASE-Challenge-team-quazo/dataset/Task1/Recorded/val/84-121123-0004_recorded_aligned.wav"
+CLEAN_PATH = "/home/jagat/Chittem/RASE-Challenge-team-quazo/dataset/Task1/Clean/val/84-121123-0004.wav"  # optional; set a path if you also want to save clean.wav
 
 # Optional: crop to the training window length (4 s in your config)
 CROP_TO_TRAIN_LENGTH = True
@@ -60,10 +63,10 @@ def peak_norm(t):
     m = t.abs().max().item()
     return t / max(m, 1.0)
 
-noisy_w     = peak_norm(noisy)
-clean_w     = peak_norm(clean)
-enhanced_w  = peak_norm(enhanced)
+# noisy_w     = peak_norm(noisy)
+# clean_w     = peak_norm(clean)
+# enhanced_w  = peak_norm(enhanced)
 
-sf.write("noisy.wav",    noisy_w.numpy(),    sample["fs"], subtype="PCM_16")
-sf.write("clean.wav",    clean_w.numpy(),    sample["fs"], subtype="PCM_16")
-sf.write("enhanced.wav", enhanced_w.numpy(), sample["fs"], subtype="PCM_16")
+sf.write("noisy.wav",    noisy.numpy(),    sample["fs"], subtype="PCM_16")
+sf.write("clean.wav",    clean.numpy(),    sample["fs"], subtype="PCM_16")
+sf.write("enhanced.wav", enhanced.numpy(), sample["fs"], subtype="PCM_16")

@@ -25,11 +25,11 @@ python_file_name = os.path.splitext(os.path.basename(__file__))[0]
 
 # OUTPUT_DIR = "/results/" 
 OUTPUT_DIR = os.path.join(current_directory, "..", "results")
-# CONFIG_FILE = os.path.join(current_directory, "config", "train_hifi_gan.yaml")
+CONFIG_FILE = os.path.join(current_directory, "config", "train_hifi_gan.yaml")
 # CONFIG_FILE = "/src/config/train_wnd_unet.yaml"
 # CONFIG_FILE = "/src/config/train_baseline.yaml"
 # CONFIG_FILE = "/src/config/train_diffwave_v1.yaml"
-CONFIG_FILE = os.path.join(current_directory, "config", "train_ap_bwe.yaml")
+# CONFIG_FILE = os.path.join(current_directory, "config", "train_ap_bwe.yaml")
 
 # WandB Configuration
 WANDB_PROJECT = "rase-challenge"  # Project name in WandB
@@ -74,7 +74,7 @@ def _validate(trainer, data_module, model_name, best_ckpt, model_params, save_di
     best_ckpt = best_ckpt
     logger.info(f"The best model can be found in {best_ckpt}")
     model_cls       = getattr(models, model_name)
-    best_model = model_cls.load_from_checkpoint(best_ckpt, strict=False, **model_params)
+    best_model = model_cls.load_from_checkpoint(best_ckpt, strict=True, **model_params)
 
     logger.info("Running validate with best model..")
     best_model.heavy_eval = True
@@ -98,6 +98,10 @@ def _validate(trainer, data_module, model_name, best_ckpt, model_params, save_di
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ckpt_path", type=str, default=None,
+                        help="Path to a Lightning checkpoint to resume from")
+    args = parser.parse_args()
     seed_everything(8, workers=True)
 
     config = safe_open_yaml(CONFIG_FILE)
@@ -162,8 +166,8 @@ if __name__ == "__main__":
     )
 
 
-    trainer.fit(model, data_module)
-    _validate(trainer, data_module, model_name, ckpt_callback.best_model_path, model_params, save_dir_fast_dev_run, fast_dev_run=True)
+    # trainer.fit(model, data_module)
+    # _validate(trainer, data_module, model_name, ckpt_callback.best_model_path, model_params, save_dir_fast_dev_run, fast_dev_run=True)
     ########## RUN ACTUAL #################
     
     ckpt_callback = ModelCheckpoint(
@@ -214,14 +218,15 @@ if __name__ == "__main__":
 
     model = _init_model(model_name, model_params)
 
-    trainer.fit(model, data_module)
+    trainer.fit(model, data_module, ckpt_path=args.ckpt_path)
     # best_ckpt = "/home/jagat/Chittem/RASE-Challenge-team-quazo/src/logs/dcctn_learning_rate=0.0001_weight_decay=0.0001_betas=79791a4d_stft_loss_config=multi-7c02bb24/version_0/checkpoints/epoch=019-step=840-val/loss=37.73.ckpt"
     # best_ckpt = "/home/jagat/Chittem/RASE-Challenge-team-quazo/src/logs/dcctn_learning_rate=0.0001_weight_decay=0.0001_betas=79791a4d_stft_loss_config=multi-e743a5b6/version_0/checkpoints/epoch=013-step=588-val/loss=98.89.ckpt"
     # best_ckpt = "/home/jagat/Chittem/RASE-Challenge-team-quazo/src/logs/dcctn_learning_rate=0.0001_weight_decay=0.0001_betas=79791a4d_stft_loss_config=multi-494a0ca3/version_0/checkpoints/epoch=013-step=588-val/loss=88.82.ckpt"
+    best_ckpt = "/home/jagat/Chittem/RASE-Challenge-team-quazo/src/logs/hifigan_learning_rate=0.0001/version_7/checkpoints/epoch=041-step=55524-val/loss=3.04.ckpt"
     data_module.setup("fit")
     _validate(trainer, data_module, model_name,
-              ckpt_callback.best_model_path, 
-            # best_ckpt,
+            #   ckpt_callback.best_model_path, 
+            best_ckpt,
             model_params, save_dir, fast_dev_run=False)
 
 

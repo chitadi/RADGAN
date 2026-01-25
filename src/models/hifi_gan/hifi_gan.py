@@ -1,6 +1,7 @@
 import torch
 import json
 import os
+import sys
 import numpy as np
 import librosa
 import torch.nn.functional as F
@@ -10,15 +11,19 @@ from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 from typing import Any, Dict, Optional, Tuple
 # from utils import init_weights, get_padding
 from models.hifi_gan.utils import init_weights, get_padding
-from models.hifi_gan.mel_dataset import mel_spectrogram, MAX_WAV_VALUE
-from models.hifi_gan.env import AttrDict
-from enhance_lower_harmonics_for_model import enhance_low_harmonics_spectral
-from noise_reduction_for_gan import Wiener
 
-try:
-    from ..base_model import BaseModel
-except ImportError:
-    from base_model import BaseModel
+this_dir = os.path.dirname(os.path.abspath(__file__))
+models_dir = os.path.dirname(this_dir)            # .../src/models
+src_dir = os.path.dirname(models_dir)
+
+for p in (models_dir, src_dir):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+from base_model import BaseModel
+# try:
+#     from ..base_model import BaseModel
+# except ImportError:
+#     from base_model import BaseModel
 
 
 LRELU_SLOPE = 0.1

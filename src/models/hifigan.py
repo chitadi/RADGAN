@@ -99,7 +99,7 @@ class HiFiGAN(BaseModel):
         # --- Load Phase‑1 generator weights only (Phase‑1‑specific) ---
         # This is the only Phase‑1 dependency you still want.
         base_dir = os.path.join(os.path.dirname(__file__), "hifi_gan")
-        phase1_dir = os.path.join(base_dir, "checkpoints_phase1")
+        phase1_dir = os.path.join(base_dir, "checkpoints_pretrain")
         g_phase1 = scan_checkpoint(phase1_dir, "g_")
         if g_phase1 is not None:
             state_g = load_checkpoint(g_phase1, device=torch.device("cpu"))
@@ -122,17 +122,19 @@ class HiFiGAN(BaseModel):
             fs_val = float(fs)
         assert int(fs_val) == self.h.sampling_rate, f"Expected fs={self.h.sampling_rate}, got {fs_val}"
 
-        rec_np = recorded.detach().cpu().numpy()  # (B, T)
-        enh_list = []
-        for x in rec_np:
-            # Match Phase‑2 pipeline scale: int16‑like → preprocess → normalize*0.95
-            x_int = x * MAX_WAV_VALUE
-            y_enh = preprocessing_weiner_with_harmonics(x_int, fs_val)  # 1D np
-            y_enh = y_enh.astype(np.float32) / MAX_WAV_VALUE
-            y_enh = librosa.util.normalize(y_enh) * 0.95
-            enh_list.append(y_enh)
+        # no wiener or harmonics here
+        # rec_np = recorded.detach().cpu().numpy()  # (B, T)
+        # enh_list = []
+        # for x in rec_np:
+        #     # Match Phase‑2 pipeline scale: int16‑like → preprocess → normalize*0.95
+        #     x_int = x * MAX_WAV_VALUE
+        #     y_enh = preprocessing_weiner_with_harmonics(x_int, fs_val)  # 1D np
+        #     y_enh = y_enh.astype(np.float32) / MAX_WAV_VALUE
+        #     y_enh = librosa.util.normalize(y_enh) * 0.95
+        #     enh_list.append(y_enh)
 
-        enh_batch = torch.from_numpy(np.stack(enh_list)).to(self.device)  # (B, T')
+        # enh_batch = torch.from_numpy(np.stack(enh_list)).to(self.device)  # (B, T')
+        enh_batch = recorded.to(self.device).to(torch.float32)  # (B, T)
 
         mel = mel_spectrogram(
             enh_batch,
@@ -357,7 +359,7 @@ class HiFiGAN(BaseModel):
 
         # Combine generator losses (simplified from train_hifi_gan_finetune.py)
         loss_gen_all = (
-            loss_gen_s + loss_gen_f + loss_gen_m
+            0.5 * (loss_gen_s + loss_gen_f + loss_gen_m)
             + loss_fm_s + loss_fm_f + loss_fm_m
             + loss_mel
             + loss_mrstft

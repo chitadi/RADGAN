@@ -18,13 +18,13 @@ trainer:
     limit_train_batches: 5
     limit_val_batches: 5
     # gradient_clip_val: 0.5
-    devices: [2]
+    devices: [0]
     accelerator: "gpu"
   full:
-    max_epochs: 20
+    max_epochs: 60
     # gradient_clip_val: 10.0
     # accumulate_grad_batches: 8
-    devices: [2]        # list for multi-GPU
+    devices: [0]        # list for multi-GPU
     accelerator: "gpu"
   logging:
     use_wandb: true
