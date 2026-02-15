@@ -2,7 +2,7 @@
 datamodule: 
   length_sec: 4
   batch_size: 16
-  crop_fixed_on: ["val"]
+  crop_fixed_on: []
   fixed_start_sec: 0.0
   num_workers: 2
 
@@ -21,7 +21,7 @@ trainer:
     devices: [0]
     accelerator: "gpu"
   full:
-    max_epochs: 60
+    max_epochs: 120
     # gradient_clip_val: 10.0
     # accumulate_grad_batches: 8
     devices: [0]        # list for multi-GPU

@@ -20,8 +20,18 @@ from .hifi_gan.hifi_gan import (
 )
 from .hifi_gan.mel_dataset import mel_spectrogram, MAX_WAV_VALUE
 from .hifi_gan.utils import scan_checkpoint, load_checkpoint
-from weiner_with_spectral_preprocessing import preprocessing_weiner_with_harmonics
+# from weiner_with_spectral_preprocessing import preprocessing_weiner_with_harmonics
+# for the ablation 
+
+from weiner_with_spectral_preprocessing import (
+    preprocessing_weiner_with_harmonics,
+    preprocessing_wiener_only,
+    preprocessing_harmonics_only,
+)
+
 from auraloss.freq import MultiResolutionSTFTLoss
+
+# from .cleanmel import CleanMel
 
 
 HIFIGAN_CONFIG = AttrDict(
@@ -73,6 +83,18 @@ class HiFiGAN(BaseModel):
         h_dict = dict(HIFIGAN_CONFIG)       # shallow copy
         h_dict["learning_rate"] = learning_rate
         self.h = AttrDict(h_dict)
+
+        # #load cleanmel first
+        # CLEANMEL_CKPT = os.path.join(os.path.dirname(__file__), "cleanmel_utils", "loss=1.88.ckpt")
+        # self.cleanmel = CleanMel(sr=self.h.sampling_rate)
+        # ckpt = torch.load(CLEANMEL_CKPT, map_location="cpu")
+        # state = ckpt.get("state_dict", ckpt)
+        # self.cleanmel.load_state_dict(state, strict=False)
+        # self.cleanmel.eval()
+        # for p in self.cleanmel.parameters():
+        #     p.requires_grad = False
+
+        # add discriminators for finetuning
 
         self.generator = Generator(self.h)
         self.mpd = MultiPeriodDiscriminator()
@@ -126,12 +148,15 @@ class HiFiGAN(BaseModel):
         # rec_np = recorded.detach().cpu().numpy()  # (B, T)
         # enh_list = []
         # for x in rec_np:
-        #     # Match Phase‑2 pipeline scale: int16‑like → preprocess → normalize*0.95
-        #     x_int = x * MAX_WAV_VALUE
-        #     y_enh = preprocessing_weiner_with_harmonics(x_int, fs_val)  # 1D np
-        #     y_enh = y_enh.astype(np.float32) / MAX_WAV_VALUE
-        #     y_enh = librosa.util.normalize(y_enh) * 0.95
-        #     enh_list.append(y_enh)
+            # Match Phase‑2 pipeline scale: int16‑like → preprocess → normalize*0.95
+            # x_int = x * MAX_WAV_VALUE
+            # y_enh = preprocessing_weiner_with_harmonics(x_int, fs_val)  # 1D np
+            # changed for ablation
+            # y_enh = preprocessing_wiener_only(x_int, fs_val)
+            # y_enh = preprocessing_harmonics_only(x_int, fs_val)
+            # y_enh = y_enh.astype(np.float32) / MAX_WAV_VALUE
+            # y_enh = librosa.util.normalize(y_enh) * 0.95
+            # enh_list.append(y_enh)
 
         # enh_batch = torch.from_numpy(np.stack(enh_list)).to(self.device)  # (B, T')
         enh_batch = recorded.to(self.device).to(torch.float32)  # (B, T)
@@ -148,6 +173,13 @@ class HiFiGAN(BaseModel):
             center=False,
         )
         return mel
+        # wav = recorded.to(self.device).float()  # (B,T)
+
+        # with torch.no_grad():
+        #     X, X_norm = self.cleanmel.input_stft(wav)
+        #     mel_log = self.cleanmel.forward(X, inference=False)  # (B,80,frames)
+
+        # return mel_log
 
 
     def forward(self, noisy: torch.Tensor) -> torch.Tensor:
