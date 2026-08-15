@@ -5,8 +5,8 @@ import torch
 import torch.nn.functional as F
 
 from .base_model import BaseModel
-from .pretraining.env import AttrDict
-from .pretraining.network import (
+from .gan.env import AttrDict
+from .gan.network import (
     Generator,
     MultiPeriodDiscriminator,
     MultiScaleDiscriminator,
@@ -15,8 +15,8 @@ from .pretraining.network import (
     generator_loss,
     discriminator_loss,
 )
-from .pretraining.mel_dataset import mel_spectrogram
-from .pretraining.utils import scan_checkpoint, load_checkpoint
+from .gan.mel_dataset import mel_spectrogram
+from .gan.utils import scan_checkpoint, load_checkpoint
 from auraloss.freq import MultiResolutionSTFTLoss
 
 
@@ -90,7 +90,7 @@ class RADGAN(BaseModel):
         self.automatic_optimization = False
 
         # Load Phase-1 generator weights if available
-        base_dir = os.path.join(os.path.dirname(__file__), "pretraining")
+        base_dir = os.path.join(os.path.dirname(__file__), "gan")
         phase1_dir = os.path.join(base_dir, "checkpoints_pretrain")
         g_phase1 = scan_checkpoint(phase1_dir, "g_")
         if g_phase1 is not None:

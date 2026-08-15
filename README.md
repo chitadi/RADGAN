@@ -66,9 +66,9 @@ RADGAN/
 │   │   └── DNSMOS/                  # ONNX models + local scoring
 │   ├── models/
 │   │   ├── radgan.py                # RAD-GAN Lightning module (Phase 2)
-│   │   ├── WaveVoiceNet.py          # WaveVoiceNet baseline + RFG conditioning
+│   │   ├── wavevoicenet.py          # WaveVoiceNet baseline + RFG conditioning
 │   │   ├── base_model.py            # Base class with metrics
-│   │   └── pretraining/             # Generator, discriminators, losses
+│   │   └── gan/                     # Generator, discriminators, losses
 │   │       ├── network.py           # Generator, MPD, MSD, MMD
 │   │       ├── pretrain.py          # Phase 1 pretraining script
 │   │       ├── mel_dataset.py       # Mel spectrogram + dataset
@@ -175,10 +175,10 @@ Pretrain the generator on synthetically clipped clean speech (band-limited to 1 
 
 ```bash
 cd src
-python -m models.pretraining.pretrain
+python -m models.gan.pretrain
 ```
 
-This saves generator checkpoints to `src/models/pretraining/checkpoints_pretrain/`. Pretraining runs for ~66k steps (~6 hours on an NVIDIA A6000).
+This saves generator checkpoints to `src/models/gan/checkpoints_pretrain/`. Pretraining runs for ~66k steps (~6 hours on an NVIDIA A6000).
 
 ### Phase 2: Fine-tuning
 
