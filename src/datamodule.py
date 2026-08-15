@@ -1,31 +1,20 @@
-
-
 import os
-import soundfile as sf
+import math
+
+import numpy as np
 import torch
+import soundfile as sf
 from torch.utils.data import Dataset, ConcatDataset
-import torch.nn.functional as F
 import pytorch_lightning as pl
 from loguru import logger
-from typing import Dict
-from tqdm import tqdm
-import numpy as np
-import librosa
-import torchaudio
-from utils import safe_open_yaml
-import math
-from loguru import logger
-import noise_reduction as nr
-import scipy.io.wavfile as wav
-from bayes_shrink import denoise_wavelet_bayeshrink
-from enhance_lower_harmonics import enhance_low_harmonics_spectral
 
-# DATASET_FOLDER = "/data/"
-DATASET_FOLDER = os.path.join(os.path.dirname(__file__), "..", "dataset")
+DATASET_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dataset")
+
+
 class WavPairDataset(Dataset):
-    def __init__(self, recorded_wav_filepaths,  clean_wav_filepaths, task, length_sec, 
+    def __init__(self, recorded_wav_filepaths, clean_wav_filepaths, task, length_sec,
                  amp_norm="rms", percentile=95, eps=1e-8,
-                 energy_crop=False, energy_threshold=0.05, random_crop=True, 
+                 energy_crop=False, energy_threshold=0.05, random_crop=True,
                  crop_jitter=2.0, fixed_window=False, fixed_start_sec=0.0):
         self.recorded_wav_filepaths = recorded_wav_filepaths
         self.clean_wav_filepaths = clean_wav_filepaths
@@ -40,9 +29,9 @@ class WavPairDataset(Dataset):
         self.crop_jitter = crop_jitter
         self.fixed_window = fixed_window
         self.fixed_start_sec = fixed_start_sec
-        assert len(self.recorded_wav_filepaths) == len(self.clean_wav_filepaths) 
+        assert len(self.recorded_wav_filepaths) == len(self.clean_wav_filepaths)
         assert len(self.recorded_wav_filepaths) > 0
-    
+
     def _compute_scale(self, tensor: torch.Tensor) -> torch.Tensor:
         flat = tensor.abs().flatten()
         if self.amp_norm == "percentile":
@@ -51,9 +40,8 @@ class WavPairDataset(Dataset):
         else:  # default RMS
             scale = torch.sqrt(torch.mean(tensor.pow(2)) + self.eps)
         return scale.clamp_min(self.eps)
-    
+
     def _active_center(self, x):
-        # Torch path
         if isinstance(x, torch.Tensor):
             if x.numel() == 0:
                 return 0
@@ -77,31 +65,19 @@ class WavPairDataset(Dataset):
         if idx.size == 0:
             return 0
         return int((idx[0] + idx[-1]) // 2)
-    
+
     def _extract_window(self, recorded, clean, sample_length):
-        
-        # self.crop_jitter = np.random.uniform(0.25, 0.75)
-        
         if len(recorded) <= sample_length:
             return recorded[:sample_length], clean[:sample_length]
-        
-        # change knobs in init
+
         if getattr(self, "fixed_window", False):
-            # start = int(round(self.fixed_start_sec * self.fs))
-            # max_start = max(len(recorded) - sample_length, 0)
-            # start = max(0, min(start, max_start))
             start = 0
             end = start + sample_length
             return recorded[start:end], clean[start:end]
 
         center = self._active_center(recorded) if self.energy_crop else len(recorded) // 2
-        # center = len(recorded) // 2
         if self.random_crop:
-            # center = self._active_center(clean)
             max_start = max(len(recorded) - sample_length, 0)
-            # margin_left  = min(center, max_start)        # how far we can move left
-            # margin_right = max_start - min(center, max_start)
-            # jitter = min(int(self.crop_jitter * self.fs), margin_left, margin_right)
             jitter = int(self.crop_jitter * self.fs) if self.crop_jitter else sample_length // 2
             jitter = max(1, jitter)
 
@@ -119,20 +95,10 @@ class WavPairDataset(Dataset):
 
         end = start + sample_length
         return recorded[start:end], clean[start:end]
-    
+
     def __getitem__(self, idx):
-        
-
         recorded, recorded_fs = sf.read(self.recorded_wav_filepaths[idx], dtype=np.float32)
-        clean, clean_fs       = sf.read(self.clean_wav_filepaths[idx], dtype=np.float32)
-        
-        # recorded, recorded_fs = torchaudio.load(self.recorded_wav_filepaths[idx], normalize=False)
-        # rec_np = denoise_wavelet_bayeshrink(self.recorded_wav_filepaths[idx])
-        # recorded = torch.from_numpy(rec_np).to(torch.float32)
-        # clean, clean_fs       = torchaudio.load(self.clean_wav_filepaths[idx], normalize=False)
-
-        # recorded = recorded.squeeze(0).to(torch.float32)
-        # clean    = clean.squeeze(0).to(torch.float32)
+        clean, clean_fs = sf.read(self.clean_wav_filepaths[idx], dtype=np.float32)
 
         assert recorded_fs == clean_fs
         fs = clean_fs
@@ -140,166 +106,116 @@ class WavPairDataset(Dataset):
         if getattr(self, "fs", None) is None:
             self.fs = fs  # cache once for helper methods that need it
 
-        #converting to numpy array as enhance_lower_harmonic function requires input as a numpy array 
-        # recorded_np = recorded.cpu().numpy()
-        
-        # y_enh, S_orig, S_enh, f0 = enhance_low_harmonics_spectral(
-        #     recorded_np,
-        #     fs,
-        #     n_fft=256,
-        #     hop_length=128,
-        #     max_freq=1000.0,
-        #     num_harmonics=4,
-        #     bw_hz=20.0,
-        #     alpha=0.6,
-        # )
-        # converting y_enh back to torch tensor to keep consistent flow
-        # recorded = torch.from_numpy(y_enh.astype(np.float32))
-        
-        
-        # temporarily cut off to align later
+        # Align lengths
         recorded = recorded[:len(clean)]
 
         sample_length = int(self.length_sec * fs)
         recorded, clean = self._extract_window(recorded, clean, sample_length)
 
         recorded_padded = np.zeros(sample_length, dtype=np.float32)
-        clean_padded    = np.zeros(sample_length, dtype=np.float32)
-        
+        clean_padded = np.zeros(sample_length, dtype=np.float32)
+
         if len(recorded) > sample_length:
             recorded_padded = recorded[:sample_length]
         else:
             recorded_padded[:len(recorded)] = recorded
-
 
         if len(clean) > sample_length:
             clean_padded = clean[:sample_length]
         else:
             clean_padded[:len(clean)] = clean
 
-        # converting to a tensor for new pipeline
         recorded_tensor = torch.from_numpy(recorded_padded)
         clean_tensor = torch.from_numpy(clean_padded)
 
         scale_val = max(clean_tensor.abs().max().item(), 1e-8)
-        # scale_val = self._compute_scale(clean_tensor)
         scale_recorded = torch.tensor(scale_val, dtype=recorded_tensor.dtype)
-        # scale_clean = torch.tensor(max(clean_tensor.abs().max().item(), 1e-8), dtype=clean_tensor.dtype)
         scale_clean = scale_recorded
 
-        # recorded_tensor = recorded_tensor / scale_recorded
-        # clean_tensor = clean_tensor / scale_recorded
-        
         return {
             "recorded": recorded_tensor,
             "clean": clean_tensor,
             "scale_recorded": scale_recorded,
-            "scale_clean": scale_recorded,
+            "scale_clean": scale_clean,
             "fs": fs,
             "task": self.task,
         }
-        
-        # return {"recorded": recorded_padded, "clean": clean_padded, "fs": fs, 
-        #     "task": self.task
-        # }
 
     def __len__(self):
         return len(self.recorded_wav_filepaths)
 
-class DataModule(pl.LightningDataModule):
-    def __init__(self, 
-        batch_size,
-        length_sec,
-        num_workers=0,
-        pin_memory=False,
-        crop_fixed_on=None, 
-        fixed_start_sec=0.0
-        ):
-        super().__init__()
 
+class DataModule(pl.LightningDataModule):
+    def __init__(self,
+                 batch_size,
+                 length_sec,
+                 num_workers=0,
+                 pin_memory=False,
+                 crop_fixed_on=None,
+                 fixed_start_sec=0.0):
+        super().__init__()
 
         self.batch_size = batch_size
         self.length_sec = length_sec
-        # self.pairs = self.get_file_paths()
         self.dataset = {"train": [], "val": [], "test": []}
         self.num_workers = num_workers
         self.pin_memory = pin_memory
-        self.crop_fixed_on = set(crop_fixed_on or []) # e.g., {"train"}, {"train","val"}
+        self.crop_fixed_on = set(crop_fixed_on or [])
         self.fixed_start_sec = float(fixed_start_sec)
-    # def print_summary(self):
-
-    #     for mode in self.modes:
-    #         # print(f"{mode}: {len(self.speech_data_points[mode])} speech, and {len(self.noise_data_points[mode])} noise data_points")
-    #         print(f"{mode}: {len(self.speech_data_points[mode])} speech, and {len(self.ir_data_points[mode])} impulse response data_points")
 
     def setup(self, stage=None):
         logger.info(f"Loading dataset for {stage}")
-
         if stage == "fit":
             self.load_train_dev()
-        
+
     def load_train_dev(self):
-        
         assert os.path.exists(DATASET_FOLDER)
-        
-        # start fresh every setup call so append() always works
+
+        # Start fresh every setup call so append() always works
         self.dataset = {"train": [], "val": [], "test": []}
 
-        # sorting everything for reproducable results
         task_folders = sorted(os.listdir(DATASET_FOLDER))
         logger.info(f"The available tasks are {task_folders}")
-        logger.info(f"Loading dataset")
-        
-        
+        logger.info("Loading dataset")
+
         for task in task_folders:
-            
             logger.info(f"{task} contains:")
             folder_path = os.path.join(DATASET_FOLDER, task)
             clean_folder = os.path.join(folder_path, "Clean")
             recorded_folder = os.path.join(folder_path, "Recorded")
 
             for mode in sorted(os.listdir(recorded_folder)):
-                
-                
                 folder_path = os.path.join(recorded_folder, mode)
                 files = sorted(os.listdir(folder_path))
-                
-                # filter all recorded files with ext ".wav" 
-                is_wav = lambda filename: os.path.splitext(filename)[-1] == ".wav" 
-                wav_filenames = sorted(_file for _file in files if is_wav(_file))  
+
+                is_wav = lambda filename: os.path.splitext(filename)[-1] == ".wav"
+                wav_filenames = sorted(_file for _file in files if is_wav(_file))
                 recorded_wav_filepaths = [os.path.join(recorded_folder, mode, _file) for _file in wav_filenames]
 
                 file_exists = [os.path.exists(filepath) for filepath in recorded_wav_filepaths]
                 assert all(file_exists)
 
-                # find the pairs in clean folder 
-                clean_wav_filenames = [_file.replace("_recorded_aligned", "") for _file in wav_filenames]  
+                clean_wav_filenames = [_file.replace("_recorded_aligned", "") for _file in wav_filenames]
                 clean_wav_filepaths = [os.path.join(clean_folder, mode, _file) for _file in clean_wav_filenames]
                 file_exists = [os.path.exists(filepath) for filepath in clean_wav_filepaths]
 
                 assert all(file_exists)
                 assert len(recorded_wav_filepaths) == len(clean_wav_filepaths)
-                
+
                 logger.info(f"{mode}: {len(recorded_wav_filepaths)} wav files.")
-                
-                # self.dataset[mode] += WavPairDataset(recorded_wav_filepaths, 
-                #     clean_wav_filepaths, 
-                #     task=task, 
-                #     length_sec=self.length_sec)
-                
-                fixed = (mode in self.crop_fixed_on) 
+
+                fixed = (mode in self.crop_fixed_on)
                 self.dataset[mode].append(
-                    WavPairDataset(recorded_wav_filepaths, 
-                    clean_wav_filepaths, 
-                    task=task, 
-                    length_sec=self.length_sec,
-                    random_crop=(mode == "train") and not fixed,
-                    energy_crop=(mode != "train") and not fixed,
-                    fixed_window=fixed,
-                    fixed_start_sec=self.fixed_start_sec,)
+                    WavPairDataset(recorded_wav_filepaths,
+                                   clean_wav_filepaths,
+                                   task=task,
+                                   length_sec=self.length_sec,
+                                   random_crop=(mode == "train") and not fixed,
+                                   energy_crop=(mode != "train") and not fixed,
+                                   fixed_window=fixed,
+                                   fixed_start_sec=self.fixed_start_sec)
                 )
-                
-        # after all tasks/modes have been loaded
+
         for mode in ("train", "val"):
             datasets = self.dataset[mode]
             if len(datasets) == 0:
@@ -309,31 +225,21 @@ class DataModule(pl.LightningDataModule):
             else:
                 self.dataset[mode] = ConcatDataset(datasets)
 
-
-                # if mode == "train":
-                #     self.dataset["train"] 
-                # elif mode == "val":
-                #     self.dataset["val"] = {}
-                # get the corresponding clean ones
-        # for mode in os.listdir(recorded_folder):
-            # self.dataset[mode] = ConcatDataset(self.dataset[mode])
-    
-
-        
     def data_loader(self, mode):
-
         shuffle = True if mode == "train" else False
-        
         return torch.utils.data.DataLoader(
-            self.dataset[mode], 
-            batch_size=self.batch_size, 
+            self.dataset[mode],
+            batch_size=self.batch_size,
             shuffle=shuffle,
             num_workers=self.num_workers,
-            pin_memory=self.pin_memory,)
+            pin_memory=self.pin_memory,
+        )
 
     def train_dataloader(self):
         return self.data_loader("train")
+
     def val_dataloader(self):
         return self.data_loader("val")
+
     def test_dataloader(self):
         return self.data_loader("test")
