@@ -98,7 +98,8 @@ class BaseModel(pl.LightningModule):
 
         def evaluate_metrics_per_batch(fn, measure_time=False):
             if measure_time:
-                torch.cuda.synchronize()
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
                 start = time.perf_counter()
             output = []
             for batch_ref, batch_deg in zip(targets, outputs):
@@ -109,7 +110,8 @@ class BaseModel(pl.LightningModule):
                         val = fn.min()
                     output.append(val)
             if measure_time:
-                torch.cuda.synchronize()
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
                 end = time.perf_counter()
                 print(f"Elapsed time: {end - start:.6f} seconds")
             return output
