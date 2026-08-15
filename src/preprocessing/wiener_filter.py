@@ -17,9 +17,6 @@ def halfwave_rectification(array):
         halfwave : 1D np.array, Half wave temporal rectification
         
     """
-    # halfwave = np.zeros(array.size)
-    # halfwave[np.argwhere(array > 0)] = 1
-    # return halfwave
     return np.maximum(array, 0.0)
 
     

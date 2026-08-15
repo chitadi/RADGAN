@@ -13,10 +13,10 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 from torch.distributed import init_process_group
 
-from env import AttrDict, build_env
-from mel_dataset import MelDataset, mel_spectrogram, get_dataset_filelist
-from network import Generator
-from utils import plot_spectrogram, scan_checkpoint, load_checkpoint, save_checkpoint
+from .env import AttrDict, build_env
+from .mel_dataset import MelDataset, mel_spectrogram, get_dataset_filelist
+from .network import Generator
+from .utils import plot_spectrogram, scan_checkpoint, load_checkpoint, save_checkpoint
 from auraloss.freq import MultiResolutionSTFTLoss
 
 torch.backends.cudnn.benchmark = True
@@ -27,8 +27,11 @@ def train(rank, a, h):
         init_process_group(backend=h.dist_config['dist_backend'], init_method=h.dist_config['dist_url'],
                            world_size=h.dist_config['world_size'] * h.num_gpus, rank=rank)
 
-    torch.cuda.manual_seed(h.seed)
-    device = torch.device('cuda:{}'.format(rank))
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(h.seed)
+        device = torch.device('cuda:{}'.format(rank))
+    else:
+        device = torch.device('cpu')
 
     generator = Generator(h).to(device)
 
