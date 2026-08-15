@@ -1,175 +1,303 @@
-# Instructions to participants
+# RAD-GAN: mmWave Radar Aware Dual-Conditioned GAN for Speech Reconstruction
 
-Please contact us @ rase-challenge@ntu.edu.sg at anytime if you face any issues during the course of this set-up. 
+<p align="center">
+  <a href="https://arxiv.org/pdf/2602.22431">📄 Paper</a> &nbsp;•&nbsp;
+  <a href="https://rad-gan-demo-site.vercel.app/">🎧 Audio Demos</a>
+</p>
 
-# Download
-Download the baseline and training code from this repo. 
+Official implementation of **RAD-GAN**, a two-stage GAN pipeline for reconstructing intelligible speech from low-SNR (-5 dB to -1 dB) mmWave radar captures through glass walls.
+
+> **Jash Karani, Adithya Chittem, Deepan Roy, Sandeep Joshi** — BITS Pilani
+
+---
+
+## Overview
+
+Millimeter-wave (mmWave) radar captures are band-limited and noisy, making speech reconstruction difficult. RAD-GAN addresses this through:
+
+- **Two-stage training**: Phase 1 pretrains a HiFi-GAN generator on synthetically clipped clean speech; Phase 2 fine-tunes on fused mel spectrograms from real radar data.
+- **Multi-Mel Discriminator (MMD)**: A two-branch 2D mel spectrogram discriminator (spectral-norm + weight-norm) for stable and realistic reconstruction.
+- **Residual Fusion Gate (RFG)**: Fuses noisy mel with WaveVoiceNet-enhanced mel through a learned residual gate, providing rich conditioning to the generator.
+
+### Architecture
 
 ```
-git clone https://github.com/RASE-Challenge/challenge_baseline2026.git
+                    ┌─────────────┐
+  Noisy Radar ─────►│  WaveVoice  │── Mwvn ──┐
+                    │    Net      │          │
+                    └─────────────┘    ┌─────┴──────┐
+                                       │ Residual   │
+  Noisy Radar ──── Mnoisy ───────────►│ Fusion     │── Mfused ──► Generator ──► Enhanced Speech
+                                       │ Gate (RFG) │
+                                       └────────────┘
 ```
 
-and link dataset from your email after you have registered.
+### Results
 
+**Table 1: Model Comparison** (Weighted Score = 0.4 × Task1 + 0.6 × Task2)
 
-After downloading, unzip the dataset.zip into the repo, and check that the file directory is as such:
-```text
-challenge_baseline2026/
-├── dataset/ # unzip the downloaded dataset and copy here
-│   ├── Task1/
-│   └── Task2/
-├── results/
+| Model | PESQ | ESTOI | CS-MFCC | DNSMOS | Task 1 | Task 2 | Weighted |
+|-------|------|-------|---------|--------|--------|--------|----------|
+| WaveVoiceNet [6] | 1.302 | 0.173 | 0.675 | 1.558 | 0.309 | 0.228 | 0.260 |
+| HiFi-GAN [7] | 1.311 | 0.144 | 0.627 | 2.286 | 0.332 | 0.258 | 0.288 |
+| DCCTN [23] | 1.547 | 0.080 | 0.377 | 1.318 | 0.179 | 0.167 | 0.172 |
+| AP-BWE [24] | 1.174 | 0.065 | 0.449 | 1.472 | 0.196 | 0.144 | 0.165 |
+| DiffWave [25] | 1.230 | 0.058 | 0.288 | 1.083 | 0.117 | 0.100 | 0.106 |
+| CDiffuSE [26] | 1.175 | 0.091 | 0.301 | 1.225 | 0.149 | 0.100 | 0.119 |
+| **RAD-GAN (ours)** | **1.310** | **0.190** | **0.669** | **2.688** | **0.387** | **0.297** | **0.333** |
+
+**Table 2: Ablation Study**
+
+| Config | Description | PESQ | ESTOI | CS-MFCC | DNSMOS | Task 1 | Task 2 | Weighted |
+|--------|-------------|------|-------|---------|--------|--------|--------|----------|
+| B0 | HiFi-GAN baseline | 1.311 | 0.144 | 0.627 | 2.286 | 0.332 | 0.258 | 0.288 |
+| B1 | B0 + MMD + MR-STFT | 1.307 | 0.160 | 0.588 | 2.449 | 0.347 | 0.251 | 0.290 |
+| B2 | B1 + pretraining | 1.286 | 0.179 | 0.621 | 2.639 | 0.376 | 0.269 | 0.312 |
+| B3 | B2 + WVN conditioning | 1.310 | 0.190 | 0.669 | 2.688 | 0.387 | 0.297 | 0.333 |
+
+---
+
+## Repository Structure
+
+```
+RADGAN/
 ├── src/
-│   ├── config/ 
-│   ├── logs/  
-│   ├── metrics/ 
+│   ├── config/
+│   │   ├── train_hifi_gan.yaml      # RAD-GAN training config
+│   │   └── train_baseline.yaml      # WaveVoiceNet config
+│   ├── metrics/
+│   │   ├── pesq.py                  # Narrowband PESQ
+│   │   ├── estoi.py                 # ESTOI
+│   │   ├── mfcc_cosine.py           # MFCC cosine similarity
+│   │   ├── dnsmos.py                # DNSMOS wrapper
+│   │   └── DNSMOS/                  # ONNX models + local scoring
 │   ├── models/
-│   ├── train.py        
-│   ├── datamodule.py
-│   ├── save_for_submission.py
-│   └── utils.py
-├── baseline_docker_build.sh
-├── baseline_docker_run.sh
-├── baseline.dockerfile
-├── config.sh
+│   │   ├── hifigan.py               # RAD-GAN Lightning module (Phase 2)
+│   │   ├── WaveVoiceNet.py          # WaveVoiceNet baseline + RFG conditioning
+│   │   ├── base_model.py            # Base class with metrics
+│   │   └── hifi_gan/                # Generator, discriminators, losses
+│   │       ├── hifi_gan.py          # Generator, MPD, MSD, MMD
+│   │       ├── train_hifi_gan.py    # Phase 1 pretraining script
+│   │       ├── mel_dataset.py       # Mel spectrogram + dataset
+│   │       ├── inference.py         # Standalone inference
+│   │       ├── env.py               # AttrDict config helper
+│   │       ├── utils.py             # Checkpoint helpers
+│   │       └── config.json          # Generator hyperparameters
+│   ├── scripts/
+│   │   ├── hear_output.py           # Inference demo (single audio)
+│   │   └── plot_time_domain_and_stft.py  # Waveform + spectrogram plotting
+│   ├── train.py                     # Main training entry point
+│   ├── datamodule.py                # Data loading
+│   ├── utils.py                     # YAML helpers
+│   ├── save_for_submission.py       # Submission packaging
+│   ├── weiner_with_spectral_preprocessing.py
+│   ├── noise_reduction_for_gan.py
+│   └── enhance_lower_harmonics_for_model.py
+├── outputs/
+│   ├── audios/                      # Inference audio outputs
+│   └── plots/                       # Generated plots
+├── environment.yml                  # Conda environment
+├── requirements.txt                 # pip dependencies
+├── LICENSE
 └── README.md
 ```
 
+---
 
-## 1. Installing docker on your system
+## Installation
 
-Please follow the quick-start [docker guide](docs/docker_setup_ubuntu.md) that is aimed to help participants with **zero prior Docker experience** install and configure Docker on their system. 
+### Option A: Conda (recommended)
 
-
-## 2. Running our baseline docker
-We have prepared a docker baseline for you to extend (we have prepared a guide for that too). Please make sure that the docker is installed, with [running without sudo enabled](docs/docker_setup_ubuntu.md#4-run-without-sudo-log-out-and-log-back-in-to-take-effect).
-
-Run the build command in challenge_baseline folder via
-```bash 
-bash baseline_docker_build.sh
-```
-Followed by the run command
-```bash 
-bash baseline_docker_run.sh
-```
-
-Once successful, you should see 
 ```bash
-root@<container_id>:/src#
+git clone https://github.com/your-username/RADGAN.git
+cd RADGAN
+
+# Create the conda environment
+conda env create -f environment.yml
+conda activate radgan
 ```
 
-## 3. VS code set-up (optional)
-We recommend using **Visual Studio Code (VS Code)** as your main editor.  
-It’s lightweight, cross-platform, and works well with both Python and Docker.
-Follow our [VS Code Setup Guide for docker](./docs/vscode_setup.md) (optional).
+For GPU support, ensure you have NVIDIA drivers and CUDA 12.4 installed. The `environment.yml` pulls PyTorch with CUDA 12.4 support automatically.
 
-## 4. Run the training code in the container
+### Option B: pip
 
-Note: Make sure that your command prompt is in root@<container_id>.
-
-Run the following command to train. Note that there are three phases, first with `fast development run` (fast_dev_run), second with `full training`  and finally with `full validation run`.
 ```bash
-python train.py
+git clone https://github.com/your-username/RADGAN.git
+cd RADGAN
+
+# Create a virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# venv\Scripts\activate   # Windows
+
+# Install PyTorch separately (see https://pytorch.org for your CUDA version)
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# Install remaining dependencies
+pip install -r requirements.txt
 ```
-The rationale for the fast dev run phase is to facilitate quick fails (i.e., code issues, etc).  For now, you can terminate the training script (via `Ctrl+C`) after it has completed the fast development run phase and leverage it's saved file to test the submission portal.
 
-## 5. Submit a dummy evaluation result
+---
 
+## Dataset
 
-To facilitate the submission during the testing phase, we have prepared some trial examples for submitting. Our team believe in protecting your hard work in this challenge and hence, provided a way to protect your IP without requiring you to open-source your submissions. In addition, we provide an single line command to prepare your submission in accordance to the submission platform. 
+This project uses the [RASE 2026 Challenge](https://rase-challenge.github.io/RASE2026-Challenge/) dataset. The dataset includes paired radar-captured (noisy) and microphone-recorded (clean) speech at 8 kHz.
 
-For submission, you will need to run the following command `inside the docker container` (only one-time):
+After obtaining the dataset, place it in the repo root:
+
+```
+RADGAN/
+├── dataset/
+│   ├── Task1/
+│   │   ├── Clean/
+│   │   │   ├── train/
+│   │   │   └── val/
+│   │   └── Recorded/
+│   │       ├── train/
+│   │       └── val/
+│   └── Task2/
+│       ├── Clean/
+│       │   ├── train/
+│       │   └── val/
+│       └── Recorded/
+│           ├── train/
+│           └── val/
+```
+
+Recorded filenames end with `_recorded_aligned.wav` and are paired with clean files of the same name (without the suffix).
+
+> **Note:** The dataset is private. Please reach out to us at **chittemadithya@gmail.com** with your use case to acquire the dataset.
+
+---
+
+## Training
+
+RAD-GAN uses a two-stage training pipeline:
+
+### Phase 1: Pretraining
+
+Pretrain the generator on synthetically clipped clean speech (band-limited to 1 kHz):
+
 ```bash
-python3 -m pip install pip-chill
-echo "Updating package list..."
-apt-get update -y
-
-echo "Installing git..."
-apt-get install -y git
-
-git pull # this will update the save_for_submission file
+cd src
+python -m models.hifi_gan.train_hifi_gan
 ```
 
-To submit, just run the following command `inside the docker container`:
-```python 
-python3 /src/save_for_submission.py -c /results/WaveVoiceNet__learning_rate=0.001_fast_dev_run/fast_dev_run.yaml
-```
-which will generate the following outputs:
-```text
-/results/WaveVoiceNet__learning_rate=0.001_fast_dev_run/model_submission.zip
-```
-Download the zip file.
+This saves generator checkpoints to `src/models/hifi_gan/checkpoints_pretrain/`. Pretraining runs for ~66k steps (~6 hours on an NVIDIA A6000).
 
+### Phase 2: Fine-tuning
 
-With the .zip file, submit it to our Codabench challenge website. The following steps will guide you towards submissions:
-1. Register a Codabench account in www.codabench.org (please use the same email registered in our registration form as we have added them to the whitelist in 1.)
-2. Visit our challenge websites at https://www.codabench.org/competitions/10539/?secret_key=a16e7724-eaac-4bb6-80a7-d57081ba3074 for fast development trials and https://www.codabench.org/competitions/10857/?secret_key=46e8f79c-39d6-4843-83e5-86f8311e756d for official submission. For now, go to the former link for quick tests.
-.
-3. Under "My Submissions" tab, accept the terms and conditions, then register for our challenge. If you have not sign up using our registration form, please wait for our approval.
-4. Check that you have choose to submit as "Yourself" or your organization 
-5. Thereafter, go to the "My submissions" tab. Click the clip icon and upload the zip file. It will take a while to run (took about 2 mins for the fast development trial with our baseline). If your submission is successful, you should see a score after you refresh.
-6. Add your score to the leadership board.
+Fine-tune with adversarial losses and WVN conditioning:
 
-Please note that since the evaluation is done on our server, we note that bigger models will take substantially longer time to run (please also note that we will only supply one RTX6000 Ada per run). As such, we have restricted everyone to `one official` and `30 trials` submissions per day during the validation period and testing period. 
-
-
-## 6. Innovate your new model!
-The code base is prepared to allow easy extension. To make your new model, there are only three codes you need to focus on: the model, configuration, and train.py as shown in the following folders/files:
-```text
-challenge_baseline2026/
-├── src/
-│   ├── config/train_baseline.yaml  <- copy this and paste in the same folder
-│   ├── models/WaveVoiceNet.py <- copy this and paste in the same folder       
-│   ├── train.py   <- change config parameter     
-│   ├── datamodule.py
-│   └── utils.py
-├── baseline_docker_build.sh
-├── baseline_docker_run.sh
-├── baseline.dockerfile
-├── config.sh
-└── README.md
+```bash
+cd src
+python train.py --config config/train_hifi_gan.yaml
 ```
 
-Then, rename `models/WaveVoiceNet copy.py` file to `models/{NewModelName}.py` and within it the `class WaveVoiceNet(BaseModel)` at line 64 to `class {NewModelName}(BaseModel)` where `{NewModelName}` will be your new model name. Then, for `config/train_baseline copy.yaml`, change to `config/train_{NewModelName}`, and change the model parameter as follows:
-```yaml
-datamodule: 
-  length_sec: 4
-  batch_size: 8
+The Phase 1 generator weights are loaded automatically from `checkpoints_pretrain/`. Fine-tuning runs for ~100k steps (~14 hours on an NVIDIA A6000).
 
-model: "{NewModelName}" #<-- change this
-model_params: 
-  learning_rate: 0.001 
-```
-Finally, in the ```train.py``` file change the following:
-```python
-# train.py around line 26
-OUTPUT_DIR = "/results/" 
-CONFIG_FILE = "/src/config/train_{NewModelName}" #<-- change this
+### Smoke Test (CPU)
+
+Verify the pipeline works without a GPU:
+
+```bash
+cd src
+python train.py --config config/train_hifi_gan.yaml --fast-dev-run
 ```
 
-With the above three, you will be able to start your own modelling.
-Make sure that all your model files are encapsulated within the folder **src/models** for smoother submission.
+This runs 1 epoch with 5 batches. You'll need to set `accelerator: "cpu"` in the config or rely on PyTorch Lightning's auto-detection.
 
+### Resuming from a Checkpoint
 
+```bash
+python train.py --config config/train_hifi_gan.yaml --ckpt_path path/to/checkpoint.ckpt
+```
 
-Thank you and enjoy your modelling!
+### WandB Logging (optional)
 
+To enable Weights & Biases logging, set the environment variable:
 
-## 🧩 Framework Overview
+```bash
+export WANDB_API_KEY="your-api-key"
+export WANDB_PROJECT="rad-gan"        # optional, defaults to "rad-gan"
+export WANDB_ENTITY="your-team"       # optional
+```
 
-This framework is built using:
+If `WANDB_API_KEY` is not set, only CSV logging is used.
 
-- 🐳 **[Docker](https://www.docker.com/):** for reproducible environments 
-- ⚡ **[PyTorch Lightning](https://github.com/Lightning-AI/pytorch-lightning):** for scalable and clean model training [1]
-- 🔥 **[PyTorch](https://pytorch.org/):** for flexible deep learning model design [2]
-- 🎙️ **WaveVoiceNet :** our implementation of baseline model in [3]
-- 🧮 **[Codabench](https://www.codabench.org/):** for benchmark evaluation and automated submission management [4] 
+---
 
-**References**  
-[1] W. Falcon et al., “PyTorch Lightning,” GitHub repository, 2019. Available: https://github.com/Lightning-AI/pytorch-lightning
-[2] A. Paszke et al., “PyTorch: An imperative style, high-performance deep learning library,” in Proc. Adv. in Neural Info. Process. Syst., vol. 32, 2019, pp. 8024–8035.
-[3] C. Xu, Z. Li, H. Zhang, A. S. Rathore, H. Li, C. Song, K. Wang, and W. Xu, “WaveEar: Exploring a mmwave-based
-noise-resistant speech sensing for voice-user interface,” in Proc.
-Int. Conf. Mobile Syst. Applications Serv., 2019, p. 14–26.
-[4] S. Pavao, B. Pfahringer, and E. Frank, “Codabench: A benchmarking platform for reusable research,” J. Mach. Learn. Res., vol. 23, no. 1, pp. 1–6, 2022.
+## Inference
 
+Run inference on a single audio file:
+
+```bash
+cd src
+python -m scripts.hear_output \
+    --config config/train_hifi_gan.yaml \
+    --checkpoint path/to/model.ckpt \
+    --audio path/to/recorded.wav \
+    --clean path/to/clean.wav \
+    --output-dir ../outputs/audios
+```
+
+This saves `noisy.wav`, `enhanced.wav`, and `clean.wav` to the output directory.
+
+### Plotting
+
+Generate time-domain and STFT spectrogram plots:
+
+```bash
+cd src
+python -m scripts.plot_time_domain_and_stft \
+    --files ../outputs/audios/clean.wav ../outputs/audios/noisy.wav ../outputs/audios/enhanced.wav \
+    --labels Clean Noisy Enhanced \
+    --output-dir ../outputs/plots
+```
+
+---
+
+## Metrics
+
+The following metrics are computed during evaluation:
+
+| Metric | Description |
+|--------|-------------|
+| PESQ | Perceptual Evaluation of Speech Quality (narrowband, 8 kHz) |
+| ESTOI | Extended Short-Time Objective Intelligibility |
+| DNSMOS | Deep Noise Suppression Mean Opinion Score (P.835) |
+| CS-MFCC | MFCC Cosine Similarity |
+
+The weighted score is defined as:
+
+```
+TaskScore = (norm_PESQ + norm_DNSMOS + CS_MFCC + ESTOI) / 4
+WeightedScore = 0.4 × Task1 + 0.6 × Task2
+```
+
+---
+
+## Citation
+
+If you use this work, please cite:
+
+```bibtex
+@article{karani2026radgan,
+  title={mmWave Radar Aware Dual-Conditioned GAN for Speech Reconstruction of Signals With Low SNR},
+  author={Karani, Jash and Chittem, Adithya and Roy, Deepan and Joshi, Sandeep},
+  journal={Open MIND},
+  year={2026},
+  publisher={Open MIND}
+}
+```
+
+---
+
+## Acknowledgements
+
+This project builds upon:
+- [RASE 2026 Challenge](https://rase-challenge.github.io/RASE2026-Challenge/) dataset
+
+## License
+
+[MIT](LICENSE)
