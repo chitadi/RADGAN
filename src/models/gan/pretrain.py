@@ -139,6 +139,7 @@ def train(rank, a, h):
 
             loss_gen_all = loss_mel + mrstft_weight * loss_mrstft
 
+            optim_g.zero_grad()
             loss_gen_all.backward()
             optim_g.step()
 
