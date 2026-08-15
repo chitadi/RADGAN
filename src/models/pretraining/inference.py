@@ -8,7 +8,7 @@ from scipy.io.wavfile import write
 
 from env import AttrDict
 from mel_dataset import MAX_WAV_VALUE
-from hifi_gan import Generator
+from network import Generator
 from utils import scan_checkpoint, load_checkpoint
 
 h = None

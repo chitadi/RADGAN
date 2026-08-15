@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-from noise_reduction_for_gan import Wiener
-from enhance_lower_harmonics_for_model import enhance_low_harmonics_spectral
+from .wiener_filter import Wiener
+from .enhance_harmonics import enhance_low_harmonics_spectral
 
 NOISE_BEGIN = 0.0
 NOISE_END   = 0.2

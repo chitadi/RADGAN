@@ -5,8 +5,8 @@ import torch
 import torch.nn.functional as F
 
 from .base_model import BaseModel
-from .hifi_gan.env import AttrDict
-from .hifi_gan.hifi_gan import (
+from .pretraining.env import AttrDict
+from .pretraining.network import (
     Generator,
     MultiPeriodDiscriminator,
     MultiScaleDiscriminator,
@@ -15,12 +15,12 @@ from .hifi_gan.hifi_gan import (
     generator_loss,
     discriminator_loss,
 )
-from .hifi_gan.mel_dataset import mel_spectrogram
-from .hifi_gan.utils import scan_checkpoint, load_checkpoint
+from .pretraining.mel_dataset import mel_spectrogram
+from .pretraining.utils import scan_checkpoint, load_checkpoint
 from auraloss.freq import MultiResolutionSTFTLoss
 
 
-HIFIGAN_CONFIG = AttrDict(
+RADGAN_CONFIG = AttrDict(
     dict(
         resblock="1",
         num_gpus=0,
@@ -63,11 +63,11 @@ HIFIGAN_CONFIG = AttrDict(
 )
 
 
-class HiFiGAN(BaseModel):
+class RADGAN(BaseModel):
     def __init__(self, learning_rate: float = 1e-4):
         super().__init__()
 
-        h_dict = dict(HIFIGAN_CONFIG)
+        h_dict = dict(RADGAN_CONFIG)
         h_dict["learning_rate"] = learning_rate
         self.h = AttrDict(h_dict)
 
@@ -90,7 +90,7 @@ class HiFiGAN(BaseModel):
         self.automatic_optimization = False
 
         # Load Phase-1 generator weights if available
-        base_dir = os.path.join(os.path.dirname(__file__), "hifi_gan")
+        base_dir = os.path.join(os.path.dirname(__file__), "pretraining")
         phase1_dir = os.path.join(base_dir, "checkpoints_pretrain")
         g_phase1 = scan_checkpoint(phase1_dir, "g_")
         if g_phase1 is not None:
@@ -328,4 +328,4 @@ class HiFiGAN(BaseModel):
         )
 
 
-hifigan = HiFiGAN
+radgan = RADGAN

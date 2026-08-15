@@ -15,7 +15,7 @@ from torch.distributed import init_process_group
 
 from env import AttrDict, build_env
 from mel_dataset import MelDataset, mel_spectrogram, get_dataset_filelist
-from hifi_gan import Generator
+from network import Generator
 from utils import plot_spectrogram, scan_checkpoint, load_checkpoint, save_checkpoint
 from auraloss.freq import MultiResolutionSTFTLoss
 
@@ -203,7 +203,7 @@ def train(rank, a, h):
 
 
 def main():
-    print("Initializing HiFi-GAN training (Phase 1)..")
+    print("Initializing RAD-GAN Phase 1 pretraining..")
 
     base_dir = os.path.dirname(__file__)
 

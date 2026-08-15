@@ -1,4 +1,4 @@
 from .WaveVoiceNet import WaveVoiceNet
-from .hifigan import HiFiGAN
+from .radgan import RADGAN
 
-__all__ = ["WaveVoiceNet", "hifigan"]
+__all__ = ["WaveVoiceNet", "radgan"]

@@ -7,14 +7,14 @@ output directory. Also prints output statistics.
 
 Usage:
     python -m scripts.hear_output \
-        --config src/config/train_hifi_gan.yaml \
+        --config src/config/train_radgan.yaml \
         --checkpoint path/to/model.ckpt \
         --audio path/to/recorded.wav \
         --output-dir outputs/audios
 
     # Optionally provide a clean reference for comparison:
     python -m scripts.hear_output \
-        --config src/config/train_hifi_gan.yaml \
+        --config src/config/train_radgan.yaml \
         --checkpoint path/to/model.ckpt \
         --audio path/to/recorded.wav \
         --clean path/to/clean.wav \

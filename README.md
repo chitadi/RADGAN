@@ -21,16 +21,9 @@ Millimeter-wave (mmWave) radar captures are band-limited and noisy, making speec
 
 ### Architecture
 
-```
-                    ┌─────────────┐
-  Noisy Radar ─────►│  WaveVoice  │── Mwvn ──┐
-                    │    Net      │          │
-                    └─────────────┘    ┌─────┴──────┐
-                                       │ Residual   │
-  Noisy Radar ──── Mnoisy ───────────►│ Fusion     │── Mfused ──► Generator ──► Enhanced Speech
-                                       │ Gate (RFG) │
-                                       └────────────┘
-```
+<p align="center">
+  <img src="figs/block_diagram.png" alt="RAD-GAN Architecture" width="700">
+</p>
 
 ### Results
 
@@ -63,7 +56,7 @@ Millimeter-wave (mmWave) radar captures are band-limited and noisy, making speec
 RADGAN/
 ├── src/
 │   ├── config/
-│   │   ├── train_hifi_gan.yaml      # RAD-GAN training config
+│   │   ├── train_radgan.yaml        # RAD-GAN training config
 │   │   └── train_baseline.yaml      # WaveVoiceNet config
 │   ├── metrics/
 │   │   ├── pesq.py                  # Narrowband PESQ
@@ -72,12 +65,12 @@ RADGAN/
 │   │   ├── dnsmos.py                # DNSMOS wrapper
 │   │   └── DNSMOS/                  # ONNX models + local scoring
 │   ├── models/
-│   │   ├── hifigan.py               # RAD-GAN Lightning module (Phase 2)
+│   │   ├── radgan.py                # RAD-GAN Lightning module (Phase 2)
 │   │   ├── WaveVoiceNet.py          # WaveVoiceNet baseline + RFG conditioning
 │   │   ├── base_model.py            # Base class with metrics
-│   │   └── hifi_gan/                # Generator, discriminators, losses
-│   │       ├── hifi_gan.py          # Generator, MPD, MSD, MMD
-│   │       ├── train_hifi_gan.py    # Phase 1 pretraining script
+│   │   └── pretraining/             # Generator, discriminators, losses
+│   │       ├── network.py           # Generator, MPD, MSD, MMD
+│   │       ├── pretrain.py          # Phase 1 pretraining script
 │   │       ├── mel_dataset.py       # Mel spectrogram + dataset
 │   │       ├── inference.py         # Standalone inference
 │   │       ├── env.py               # AttrDict config helper
@@ -89,13 +82,15 @@ RADGAN/
 │   ├── train.py                     # Main training entry point
 │   ├── datamodule.py                # Data loading
 │   ├── utils.py                     # YAML helpers
-│   ├── save_for_submission.py       # Submission packaging
-│   ├── weiner_with_spectral_preprocessing.py
-│   ├── noise_reduction_for_gan.py
-│   └── enhance_lower_harmonics_for_model.py
+│   ├── preprocessing/
+│   │   ├── spectral_preprocessing.py
+│   │   ├── wiener_filter.py
+│   │   └── enhance_harmonics.py
 ├── outputs/
 │   ├── audios/                      # Inference audio outputs
 │   └── plots/                       # Generated plots
+├── figs/
+│   └── block_diagram.png            # Architecture diagram
 ├── environment.yml                  # Conda environment
 ├── requirements.txt                 # pip dependencies
 ├── LICENSE
@@ -180,10 +175,10 @@ Pretrain the generator on synthetically clipped clean speech (band-limited to 1 
 
 ```bash
 cd src
-python -m models.hifi_gan.train_hifi_gan
+python -m models.pretraining.pretrain
 ```
 
-This saves generator checkpoints to `src/models/hifi_gan/checkpoints_pretrain/`. Pretraining runs for ~66k steps (~6 hours on an NVIDIA A6000).
+This saves generator checkpoints to `src/models/pretraining/checkpoints_pretrain/`. Pretraining runs for ~66k steps (~6 hours on an NVIDIA A6000).
 
 ### Phase 2: Fine-tuning
 
@@ -191,7 +186,7 @@ Fine-tune with adversarial losses and WVN conditioning:
 
 ```bash
 cd src
-python train.py --config config/train_hifi_gan.yaml
+python train.py --config config/train_radgan.yaml
 ```
 
 The Phase 1 generator weights are loaded automatically from `checkpoints_pretrain/`. Fine-tuning runs for ~100k steps (~14 hours on an NVIDIA A6000).
@@ -202,7 +197,7 @@ Verify the pipeline works without a GPU:
 
 ```bash
 cd src
-python train.py --config config/train_hifi_gan.yaml --fast-dev-run
+python train.py --config config/train_radgan.yaml --fast-dev-run
 ```
 
 This runs 1 epoch with 5 batches. You'll need to set `accelerator: "cpu"` in the config or rely on PyTorch Lightning's auto-detection.
@@ -210,7 +205,7 @@ This runs 1 epoch with 5 batches. You'll need to set `accelerator: "cpu"` in the
 ### Resuming from a Checkpoint
 
 ```bash
-python train.py --config config/train_hifi_gan.yaml --ckpt_path path/to/checkpoint.ckpt
+python train.py --config config/train_radgan.yaml --ckpt_path path/to/checkpoint.ckpt
 ```
 
 ### WandB Logging (optional)
@@ -234,7 +229,7 @@ Run inference on a single audio file:
 ```bash
 cd src
 python -m scripts.hear_output \
-    --config config/train_hifi_gan.yaml \
+    --config config/train_radgan.yaml \
     --checkpoint path/to/model.ckpt \
     --audio path/to/recorded.wav \
     --clean path/to/clean.wav \

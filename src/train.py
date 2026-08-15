@@ -15,7 +15,7 @@ from utils import safe_open_yaml, stringify
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DEFAULT_CONFIG = os.path.join(CURRENT_DIR, "config", "train_hifi_gan.yaml")
+DEFAULT_CONFIG = os.path.join(CURRENT_DIR, "config", "train_radgan.yaml")
 OUTPUT_DIR = os.path.join(CURRENT_DIR, "..", "results")
 
 
@@ -92,8 +92,6 @@ def _validate(trainer, data_module, model_name, best_ckpt, model_params,
         yaml.safe_dump(payload, f, sort_keys=False)
 
     logger.info(f"Validation results saved to {output_yaml}")
-    logger.info("To prepare a submission package, run:")
-    logger.info(f"  python save_for_submission.py -c {os.path.abspath(output_yaml)}")
 
 
 if __name__ == "__main__":
