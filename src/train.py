@@ -111,6 +111,13 @@ if __name__ == "__main__":
 
     model_name = config["model"]
     model_params = config["model_params"]
+
+    # Resolve wvn_ckpt_path relative to src/ if it's a relative path
+    if model_params.get("wvn_ckpt_path"):
+        wvn_path = model_params["wvn_ckpt_path"]
+        if not os.path.isabs(wvn_path):
+            model_params["wvn_ckpt_path"] = os.path.join(CURRENT_DIR, wvn_path)
+
     model_params_str = stringify(model_params, delimiter="_")
     save_dir = os.path.join(OUTPUT_DIR, f"{model_name}_{model_params_str}")
     os.makedirs(save_dir, exist_ok=True)

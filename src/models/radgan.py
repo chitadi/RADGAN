@@ -5,12 +5,14 @@ import torch
 import torch.nn.functional as F
 
 from .base_model import BaseModel
+from .wavevoicenet import WaveVoiceNet
 from .gan.env import AttrDict
 from .gan.network import (
     Generator,
     MultiPeriodDiscriminator,
     MultiScaleDiscriminator,
     MultiMelDiscriminator,
+    ResidualFusionGate,
     feature_loss,
     generator_loss,
     discriminator_loss,
@@ -64,7 +66,7 @@ RADGAN_CONFIG = AttrDict(
 
 
 class RADGAN(BaseModel):
-    def __init__(self, learning_rate: float = 1e-4):
+    def __init__(self, learning_rate: float = 1e-4, wvn_ckpt_path: str = None):
         super().__init__()
 
         h_dict = dict(RADGAN_CONFIG)
@@ -72,6 +74,7 @@ class RADGAN(BaseModel):
         self.h = AttrDict(h_dict)
 
         self.generator = Generator(self.h)
+        self.rfg = ResidualFusionGate(num_mels=self.h.num_mels)
         self.mpd = MultiPeriodDiscriminator()
         self.msd = MultiScaleDiscriminator()
         self.mmd = MultiMelDiscriminator()
@@ -89,6 +92,16 @@ class RADGAN(BaseModel):
         self.loss_function = self._loss_fn
         self.automatic_optimization = False
 
+        # Load frozen WaveVoiceNet for RFG conditioning (Phase 2)
+        self.wvn = None
+        if wvn_ckpt_path is not None:
+            self.wvn = WaveVoiceNet.load_from_checkpoint(
+                wvn_ckpt_path, map_location="cpu"
+            )
+            self.wvn.eval()
+            for p in self.wvn.parameters():
+                p.requires_grad = False
+
         # Load Phase-1 generator weights if available
         base_dir = os.path.join(os.path.dirname(__file__), "gan")
         phase1_dir = os.path.join(base_dir, "checkpoints_pretrain")
@@ -97,7 +110,7 @@ class RADGAN(BaseModel):
             state_g = load_checkpoint(g_phase1, device=torch.device("cpu"))
             self.generator.load_state_dict(state_g["generator"])
 
-        self.save_hyperparameters(ignore=["generator", "mpd", "msd", "mmd", "mrstft"])
+        self.save_hyperparameters(ignore=["generator", "rfg", "wvn", "mpd", "msd", "mmd", "mrstft"])
 
     def _recorded_to_phase2_mel(self, recorded: torch.Tensor, fs) -> torch.Tensor:
         """
@@ -129,12 +142,46 @@ class RADGAN(BaseModel):
         )
         return mel
 
+    def _build_fused_mel(self, recorded: torch.Tensor, fs) -> torch.Tensor:
+        """
+        Build the Phase-2 conditioning mel with RFG fusion.
+        Runs WVN on the recorded snippet, computes enhanced mel,
+        and fuses with noisy mel via the RFG.
+        Returns: (B, n_mels, frames)
+        """
+        mel_noisy = self._recorded_to_phase2_mel(recorded, fs)
+
+        if self.wvn is not None:
+            with torch.no_grad():
+                wvn_enhanced = self.wvn(recorded)
+            mel_wvn = mel_spectrogram(
+                wvn_enhanced,
+                self.h.n_fft,
+                self.h.num_mels,
+                self.h.sampling_rate,
+                self.h.hop_size,
+                self.h.win_size,
+                self.h.fmin,
+                self.h.fmax,
+                center=False,
+            )
+            if mel_wvn.size(-1) != mel_noisy.size(-1):
+                if mel_wvn.size(-1) > mel_noisy.size(-1):
+                    mel_wvn = mel_wvn[..., :mel_noisy.size(-1)]
+                else:
+                    mel_wvn = F.pad(mel_wvn, (0, mel_noisy.size(-1) - mel_wvn.size(-1)))
+            mel = self.rfg(mel_noisy, mel_wvn)
+        else:
+            mel = mel_noisy
+
+        return mel
+
     def forward(self, noisy: torch.Tensor) -> torch.Tensor:
         if noisy.dim() == 1:
             noisy = noisy.unsqueeze(0)
 
         recorded = noisy.to(self.device).to(torch.float32)
-        mel = self._recorded_to_phase2_mel(recorded, self.h.sampling_rate)
+        mel = self._build_fused_mel(recorded, self.h.sampling_rate)
         y_hat = self.generator(mel).squeeze(1)
 
         target_len = noisy.size(-1)
@@ -165,8 +212,8 @@ class RADGAN(BaseModel):
         clean = batch["clean"].to(self.device).to(torch.float32)
         fs = batch.get("fs", self.h.sampling_rate)
 
-        # Build Phase-2 conditioning mel
-        x = self._recorded_to_phase2_mel(recorded, fs)
+        # Build Phase-2 conditioning mel (with RFG fusion if WVN is loaded)
+        x = self._build_fused_mel(recorded, fs)
         y = clean.unsqueeze(1)
 
         # --- Discriminator step ---
@@ -304,7 +351,7 @@ class RADGAN(BaseModel):
 
     def configure_optimizers(self):
         opt_g = torch.optim.AdamW(
-            self.generator.parameters(),
+            itertools.chain(self.generator.parameters(), self.rfg.parameters()),
             lr=self.learning_rate,
             betas=[self.h.adam_b1, self.h.adam_b2],
         )

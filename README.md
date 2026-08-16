@@ -65,11 +65,11 @@ RADGAN/
 │   │   ├── dnsmos.py                # DNSMOS wrapper
 │   │   └── DNSMOS/                  # ONNX models + local scoring
 │   ├── models/
-│   │   ├── radgan.py                # RAD-GAN Lightning module (Phase 2)
-│   │   ├── wavevoicenet.py          # WaveVoiceNet baseline + RFG conditioning
+│   │   ├── radgan.py                # RAD-GAN Lightning module (Phase 2, RFG + WVN)
+│   │   ├── wavevoicenet.py          # WaveVoiceNet baseline (Step 1, RFG conditioning)
 │   │   ├── base_model.py            # Base class with metrics
 │   │   └── gan/                     # Generator, discriminators, losses
-│   │       ├── network.py           # Generator, MPD, MSD, MMD
+│   │       ├── network.py           # Generator, MPD, MSD, MMD, RFG
 │   │       ├── pretrain.py          # Phase 1 pretraining script
 │   │       ├── mel_dataset.py       # Mel spectrogram + dataset
 │   │       ├── inference.py         # Standalone inference
@@ -167,11 +167,22 @@ Recorded filenames end with `_recorded_aligned.wav` and are paired with clean fi
 
 ## Training
 
-RAD-GAN uses a two-stage training pipeline:
+RAD-GAN uses a three-step training pipeline. Each step builds on the previous one's outputs.
 
-### Phase 1: Pretraining
+### Step 1: Train WaveVoiceNet
 
-Pretrain the generator on synthetically clipped clean speech (band-limited to 1 kHz):
+WaveVoiceNet is trained separately and used as a frozen conditioning model during Phase 2. Its enhanced mel spectrograms are fused with the noisy mel via the Residual Fusion Gate (RFG).
+
+```bash
+cd src
+python train.py --config config/train_baseline.yaml
+```
+
+This trains for 30 epochs (batch size 8, gradient accumulation 8, learning rate 1e-3). Save the best checkpoint to `src/models/wvn.ckpt`, or update `wvn_ckpt_path` in `config/train_radgan.yaml` to point to your checkpoint.
+
+### Step 2: Phase 1 — Pretraining
+
+Pretrain the HiFi-GAN generator on synthetically clipped clean speech (band-limited to 1 kHz):
 
 ```bash
 cd src
@@ -180,27 +191,29 @@ python -m models.gan.pretrain
 
 This saves generator checkpoints to `src/models/gan/checkpoints_pretrain/`. Pretraining runs for ~66k steps (~6 hours on an NVIDIA A6000).
 
-### Phase 2: Fine-tuning
+### Step 3: Phase 2 — Fine-tuning with RFG
 
-Fine-tune with adversarial losses and WVN conditioning:
+Fine-tune the generator with adversarial losses and WVN conditioning via the Residual Fusion Gate:
 
 ```bash
 cd src
 python train.py --config config/train_radgan.yaml
 ```
 
-The Phase 1 generator weights are loaded automatically from `checkpoints_pretrain/`. Fine-tuning runs for ~100k steps (~14 hours on an NVIDIA A6000).
+The Phase 1 generator weights are loaded automatically from `checkpoints_pretrain/`. The frozen WaveVoiceNet is loaded from `wvn_ckpt_path` in the config. During each training step, WVN runs inference on the 4-second recorded snippet, its enhanced mel is fused with the noisy mel via the RFG, and the fused mel conditions the generator. Fine-tuning runs for ~100k steps (~14 hours on an NVIDIA A6000).
+
+**Crop strategy:** Training uses fixed crops (first 4 seconds of each clip). Validation/scoring uses energy-centered crops (deterministic, centered on the active speech region).
 
 ### Smoke Test (CPU)
 
-Verify the pipeline works without a GPU:
+Verify the full pipeline works without a GPU:
 
 ```bash
 cd src
 python train.py --config config/train_radgan.yaml --fast-dev-run
 ```
 
-This runs 1 epoch with 5 batches. You'll need to set `accelerator: "cpu"` in the config or rely on PyTorch Lightning's auto-detection.
+This runs 1 epoch with 5 batches. Set `accelerator: "cpu"` in the config or rely on PyTorch Lightning's auto-detection. You'll need a trained WaveVoiceNet checkpoint at the path specified by `wvn_ckpt_path`, or set `wvn_ckpt_path: null` to test without RFG fusion (ablation B2).
 
 ### Resuming from a Checkpoint
 

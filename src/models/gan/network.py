@@ -315,3 +315,36 @@ class MultiMelDiscriminator(torch.nn.Module):
             y_d_rs.append(y_d_r); fmap_rs.append(fmap_r)
             y_d_gs.append(y_d_g); fmap_gs.append(fmap_g)
         return y_d_rs, y_d_gs, fmap_rs, fmap_gs
+
+
+class ResidualFusionGate(nn.Module):
+    """
+    Residual Fusion Gate (RFG) from RAD-GAN Eq. 1.
+
+    Fuses noisy mel (Mn) and WVN-enhanced mel (Mw):
+        G  = sigmoid(Conv1x1([Mn; Mw - Mn]))        # local mask
+        Mf = Mn + sigmoid(a) * G * (Mw - Mn)          # fused mel
+
+    Pointwise Conv1d (2F -> F, i.e. 160 -> 80), frame-wise.
+    Gate bias and scalar logit a initialized to -2.0 for conservative early training.
+    """
+
+    def __init__(self, num_mels=80, init_bias=-2.0):
+        super().__init__()
+        self.gate = weight_norm(Conv1d(2 * num_mels, num_mels, kernel_size=1))
+        self.alpha = nn.Parameter(torch.tensor(float(init_bias)))
+        nn.init.constant_(self.gate.bias, init_bias)
+
+    def forward(self, mn, mw):
+        """
+        Args:
+            mn: noisy mel        (B, F, T)
+            mw: WVN-enhanced mel  (B, F, T)
+        Returns:
+            fused mel             (B, F, T)
+        """
+        residual = mw - mn
+        gate_input = torch.cat([mn, residual], dim=1)      # (B, 2F, T)
+        G = torch.sigmoid(self.gate(gate_input))            # (B, F, T)
+        mf = mn + torch.sigmoid(self.alpha) * G * residual  # (B, F, T)
+        return mf

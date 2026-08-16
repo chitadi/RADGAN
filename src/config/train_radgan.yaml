@@ -2,7 +2,7 @@
 datamodule: 
   length_sec: 4
   batch_size: 16
-  crop_fixed_on: []
+  crop_fixed_on: ["train"]
   fixed_start_sec: 0.0
   num_workers: 2
 
@@ -10,6 +10,9 @@ datamodule:
 model: "radgan"
 model_params: 
   learning_rate: 0.0001
+  # Path to trained WaveVoiceNet checkpoint for RFG fusion (Phase 2).
+  # Set to null for ablation B2 (no WVN conditioning).
+  wvn_ckpt_path: "models/wvn.ckpt"
 
 
 trainer:
