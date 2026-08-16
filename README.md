@@ -282,7 +282,8 @@ If you use this work, please cite:
   author={Karani, Jash and Chittem, Adithya and Roy, Deepan and Joshi, Sandeep},
   journal={Open MIND},
   year={2026},
-  publisher={Open MIND}
+  eprint={2602.22431},
+  archivePrefix={arXiv}
 }
 ```
 
