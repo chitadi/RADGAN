@@ -104,7 +104,7 @@ RADGAN/
 ### Option A: Conda (recommended)
 
 ```bash
-git clone https://github.com/your-username/RADGAN.git
+git clone https://github.com/chitadi/RADGAN.git
 cd RADGAN
 
 # Create the conda environment
@@ -117,7 +117,7 @@ For GPU support, ensure you have NVIDIA drivers and CUDA 12.4 installed. The `en
 ### Option B: pip
 
 ```bash
-git clone https://github.com/your-username/RADGAN.git
+git clone https://github.com/chitadi/RADGAN.git
 cd RADGAN
 
 # Create a virtual environment
