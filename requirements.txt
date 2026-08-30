@@ -1,0 +1,38 @@
+# RAD-GAN Python dependencies
+# Install: pip install -r requirements.txt
+# For GPU support, install PyTorch separately from https://pytorch.org/
+
+# PyTorch ecosystem
+torch>=2.4.0
+torchaudio>=2.4.0
+
+# Deep learning
+pytorch-lightning>=2.4.0
+
+# Audio processing
+librosa>=0.10.0
+soundfile>=0.12.0
+auraloss>=0.6.0
+
+# Audio metrics
+pesq>=0.0.4
+pystoi>=0.4.0
+python_speech_features>=0.6
+
+# ONNX runtime (for DNSMOS)
+onnxruntime>=1.16.0
+
+# Scientific stack
+numpy>=1.24.0
+scipy>=1.10.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+
+# Logging and config
+wandb>=0.16.0
+loguru>=0.7.0
+parse>=1.20.0
+
+# Utilities
+tqdm>=4.65.0
+seaborn>=0.12.0

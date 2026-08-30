@@ -1,0 +1,39 @@
+name: radgan
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  # PyTorch ecosystem
+  - pytorch=2.4.0
+  - torchvision
+  - torchaudio=2.4.0
+  - pytorch-cuda=12.4
+  - cuda-toolkit=12.4
+  # Core scientific stack
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - librosa
+  - tqdm
+  # Deep learning
+  - pytorch-lightning=2.4.*
+  - pip
+  - pip:
+    # Audio metrics
+    - soundfile
+    - pesq
+    - pystoi
+    - auraloss
+    - python_speech_features
+    # ONNX for DNSMOS
+    - onnxruntime
+    # Logging
+    - wandb
+    - loguru
+    # Config parsing
+    - parse
+    # Plotting
+    - seaborn
