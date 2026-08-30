@@ -161,7 +161,7 @@ RADGAN/
 
 Recorded filenames end with `_recorded_aligned.wav` and are paired with clean files of the same name (without the suffix).
 
-> **Note:** The dataset is private. Please reach out to us at **chittemadithya@gmail.com** with your use case to acquire the dataset.
+> **Note:** The dataset is private. Please reach out to us at **chittemadithya@gmail.com, karanijash@gmail.com, or depanroy@gmail.com** with your use case to acquire the dataset.
 
 ---
 
