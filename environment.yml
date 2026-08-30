@@ -10,20 +10,20 @@ dependencies:
   - torchvision
   - torchaudio=2.4.0
   - pytorch-cuda=12.4
-  - cudatoolkit=12.4
+  - cuda-toolkit=12.4
   # Core scientific stack
   - numpy
   - scipy
   - pandas
   - matplotlib
   - librosa
-  - soundfile
   - tqdm
   # Deep learning
   - pytorch-lightning=2.4.*
   - pip
   - pip:
     # Audio metrics
+    - soundfile
     - pesq
     - pystoi
     - auraloss
